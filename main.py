@@ -428,9 +428,7 @@ if __name__ == "__main__":
         glDrawArrays(GL_TRIANGLES, 0, 36)
 
         glUseProgram(lighting_shader)
-        glUniform3f(
-            glGetUniformLocation(lighting_shader, "objectColor"), 1.0, 0.5, 0.31
-        )
+        glUniform3f(glGetUniformLocation(lighting_shader, "objectColor"), 0.0, 0.2, 1.0)
         glUniform3f(glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0)
         glUniform3f(
             glGetUniformLocation(lighting_shader, "lightPos"),
