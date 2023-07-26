@@ -10,6 +10,30 @@ def framebuffer_size_callback(window, width, height):
     glViewport(0, 0, width, height)
 
 
+def get_instance_model(i: int, j: int, t: float, n: int, m: int) -> glm.mat4:
+    smoothing = 0.1
+    scale_width = 0.05
+    full_width = 1.0 * scale_width
+    half_width = 0.5 * scale_width
+    scale_vector = glm.vec3(
+        scale_width,
+        1.5 * np.sin(np.radians(smoothing * (1 + i + j) * t, dtype=np.float32)),
+        scale_width,
+    )
+    model = glm.translate(
+        glm.vec3(
+            full_width * i - ((full_width * n) / 2.0) + half_width,
+            scale_vector.y / 2,
+            full_width * j - ((full_width * m) / 2.0) + half_width,
+        ),
+    )
+    model = glm.scale(
+        model,
+        scale_vector,
+    )
+    return model
+
+
 if __name__ == "__main__":
     glfw.init()
     glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
@@ -418,12 +442,13 @@ if __name__ == "__main__":
             GL_FALSE,
             glm.value_ptr(view),
         )
-        model = glm.mat4(1.0)
+        model = get_instance_model(0, 0, current_frame, 1, 1)
         glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
         glBufferSubData(GL_ARRAY_BUFFER, 0, glm.sizeof(model), glm.value_ptr(model))
 
         glBindVertexArray(cube_vao)
-        glDrawArrays(GL_TRIANGLES, 0, 36)
+
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, 1)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
