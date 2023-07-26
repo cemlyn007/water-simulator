@@ -421,7 +421,7 @@ if __name__ == "__main__":
             glm.value_ptr(model),
         )
         glUniform3f(
-            glGetUniformLocation(light_cube_shader, "objectColor"), 1.0, 0.5, 0.31
+            glGetUniformLocation(light_cube_shader, "objectColor"), 1.0, 1.0, 1.0
         )
 
         glBindVertexArray(light_cube_vao)
