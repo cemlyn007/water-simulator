@@ -299,53 +299,62 @@ if __name__ == "__main__":
         dtype=np.float32,
     )
 
-    cube_vao = glGenVertexArrays(1)
     vbo = glGenBuffers(1)
 
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
 
-    glBindVertexArray(cube_vao)
-
-    glVertexAttribPointer(
-        0, 3, GL_FLOAT, GL_FALSE, 6 * vertices.itemsize, ctypes.c_void_p(0)
-    )
-    glEnableVertexAttribArray(0)
-
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-        6 * vertices.itemsize,
-        ctypes.c_void_p(3 * vertices.itemsize),
-    )
-    glEnableVertexAttribArray(1)
+    n = 10
+    m = 10
+    n_instances = n * m
 
     model_vbo = glGenBuffers(1)
     glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
     glBufferData(
         GL_ARRAY_BUFFER,
-        glm.sizeof(glm.mat4(1.0)),
-        glm.value_ptr(glm.mat4(1.0)),
+        glm.sizeof(glm.array([glm.mat4(1.0)] * n_instances, dtype=glm.mat4)),
+        None,
         GL_DYNAMIC_DRAW,
     )
 
-    for i in range(4):
-        # 1 here because location 0 is the position vertex from the other buffer.
-        index = 2 + i
+    instance_models = []
+    model_vaos = []
+    for instance_index in range(n_instances):
+        model_vao = glGenVertexArrays(1)
+        glBindVertexArray(model_vao)
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
         glVertexAttribPointer(
-            index,
-            4,
+            0, 3, GL_FLOAT, GL_FALSE, 6 * vertices.itemsize, ctypes.c_void_p(0)
+        )
+        glEnableVertexAttribArray(0)
+
+        glVertexAttribPointer(
+            1,
+            3,
             GL_FLOAT,
             GL_FALSE,
-            glm.sizeof(
-                glm.mat4(1.0)
-            ),  # Why is this a matrix when really the size is vec4 if it is only a column?
-            ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
+            6 * vertices.itemsize,
+            ctypes.c_void_p(3 * vertices.itemsize),
         )
-        glVertexAttribDivisor(index, 1)
-        glEnableVertexAttribArray(index)
+        glEnableVertexAttribArray(1)
+        glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+        for i in range(4):
+            index = 2 + i
+            glVertexAttribPointer(
+                index,
+                4,
+                GL_FLOAT,
+                GL_FALSE,
+                glm.sizeof(glm.mat4(1.0)),
+                ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
+            )
+            glVertexAttribDivisor(index, 1)
+            glEnableVertexAttribArray(index)
+        instance_models.append(glm.mat4(1.0))
+        model_vaos.append(model_vao)
+
+    instance_models_data = glm.array(instance_models, dtype=glm.mat4)
 
     lighting_shader = shaders.compileProgram(
         vertex_shader, fragment_shader, validate=True
@@ -442,13 +451,25 @@ if __name__ == "__main__":
             GL_FALSE,
             glm.value_ptr(view),
         )
-        model = get_instance_model(0, 0, current_frame, 1, 1)
+        instance_index = 0
+        instance_models = []
+        for i in range(n):
+            for j in range(m):
+                model = get_instance_model(i, j, current_frame, n, m)
+                instance_models.append(model)
+                instance_index += 1
         glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
-        glBufferSubData(GL_ARRAY_BUFFER, 0, glm.sizeof(model), glm.value_ptr(model))
+        instance_models_data = glm.array(instance_models, dtype=glm.mat4)
+        glBufferSubData(
+            GL_ARRAY_BUFFER,
+            0,
+            glm.sizeof(instance_models_data),
+            instance_models_data.ptr,
+        )
 
-        glBindVertexArray(cube_vao)
-
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, 1)
+        for instance_vao in model_vaos:
+            glBindVertexArray(instance_vao)
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 36, n_instances)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
