@@ -49,6 +49,8 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     glfw.make_context_current(window)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glfw.set_framebuffer_size_callback(window, framebuffer_size_callback)
     # glfw.set_cursor_pos_callback(window, mouse_callback)
     # glfw.set_scroll_callback(window, scroll_callback)
@@ -428,7 +430,9 @@ if __name__ == "__main__":
         glDrawArrays(GL_TRIANGLES, 0, 36)
 
         glUseProgram(lighting_shader)
-        glUniform3f(glGetUniformLocation(lighting_shader, "objectColor"), 0.0, 0.2, 1.0)
+        glUniform4f(
+            glGetUniformLocation(lighting_shader, "objectColor"), 0.0, 0.2, 1.0, 0.9
+        )
         glUniform3f(glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0)
         glUniform3f(
             glGetUniformLocation(lighting_shader, "lightPos"),
