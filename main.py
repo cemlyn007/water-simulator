@@ -298,6 +298,31 @@ if __name__ == "__main__":
     )
     glEnableVertexAttribArray(1)
 
+    model_vbo = glGenBuffers(1)
+    glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        glm.sizeof(glm.mat4(1.0)),
+        glm.value_ptr(glm.mat4(1.0)),
+        GL_DYNAMIC_DRAW,
+    )
+
+    for i in range(4):
+        # 1 here because location 0 is the position vertex from the other buffer.
+        index = 2 + i
+        glVertexAttribPointer(
+            index,
+            4,
+            GL_FLOAT,
+            GL_FALSE,
+            glm.sizeof(
+                glm.mat4(1.0)
+            ),  # Why is this a matrix when really the size is vec4 if it is only a column?
+            ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
+        )
+        glVertexAttribDivisor(index, 1)
+        glEnableVertexAttribArray(index)
+
     lighting_shader = shaders.compileProgram(
         vertex_shader, fragment_shader, validate=True
     )
@@ -355,6 +380,7 @@ if __name__ == "__main__":
         model = glm.mat4(1.0)
         model = glm.translate(model, glm.vec3(light_pos[0], light_pos[1], light_pos[2]))
         model = glm.scale(model, glm.vec3(0.2))
+
         glUniformMatrix4fv(
             glGetUniformLocation(light_cube_shader, "model"),
             1,
@@ -393,12 +419,8 @@ if __name__ == "__main__":
             glm.value_ptr(view),
         )
         model = glm.mat4(1.0)
-        glUniformMatrix4fv(
-            glGetUniformLocation(lighting_shader, "model"),
-            1,
-            GL_FALSE,
-            glm.value_ptr(model),
-        )
+        glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+        glBufferSubData(GL_ARRAY_BUFFER, 0, glm.sizeof(model), glm.value_ptr(model))
 
         glBindVertexArray(cube_vao)
         glDrawArrays(GL_TRIANGLES, 0, 36)
