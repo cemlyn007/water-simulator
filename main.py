@@ -452,6 +452,9 @@ if __name__ == "__main__":
 
         app.current_scroll_offset.x = 0.0
         app.current_scroll_offset.y = 0.0
+        app.last_cursor_position.x = app.current_cursor_position.x
+        app.last_cursor_position.y = app.current_cursor_position.y
+
         view = glm.lookAt(
             camera_position,
             glm.vec3(0.0, 0.0, 0.0),
@@ -498,6 +501,13 @@ if __name__ == "__main__":
             light_pos[0],
             light_pos[1],
             light_pos[2],
+        )
+
+        glUniform3f(
+            glGetUniformLocation(lighting_shader, "viewPos"),
+            camera_position.x,
+            camera_position.y,
+            camera_position.z,
         )
 
         glUniformMatrix4fv(
