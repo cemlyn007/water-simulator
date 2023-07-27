@@ -4,6 +4,16 @@ from OpenGL.GL import shaders
 import sys
 import numpy as np
 import glm
+import math
+
+
+def update_orbit_camera_position(
+    azimuth_radians: np.float32, elevation_radians: np.float32, radius: np.float32
+) -> np.ndarray[any, np.float32]:
+    x = radius * np.cos(azimuth_radians) * np.cos(elevation_radians)
+    y = radius * np.sin(elevation_radians)
+    z = radius * np.sin(azimuth_radians) * np.cos(elevation_radians)
+    return np.array([x, y, z], dtype=np.float32)
 
 
 def framebuffer_size_callback(window, width, height):
@@ -34,6 +44,29 @@ def get_instance_model(i: int, j: int, t: float, n: int, m: int) -> glm.mat4:
     return model
 
 
+class App:
+    def __init__(self):
+        self.current_cursor_position = glm.vec2(0.0, 0.0)
+        self.last_cursor_position = glm.vec2(0.0, 0.0)
+        self.current_scroll_offset = glm.vec2(0.0, 0.0)
+        self.rotate_camera = False
+
+    def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
+        self.last_cursor_position.x = self.current_cursor_position.x
+        self.last_cursor_position.y = self.current_cursor_position.y
+        self.current_cursor_position.x = xpos
+        self.current_cursor_position.y = ypos
+
+    def mouse_button_callback(
+        self, window, button: int, action: int, mods: int
+    ) -> None:
+        self.rotate_camera = button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS
+
+    def scroll_callback(self, window, xoffset: float, yoffset: float) -> None:
+        self.current_scroll_offset.x = xoffset
+        self.current_scroll_offset.y = yoffset
+
+
 if __name__ == "__main__":
     glfw.init()
     glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
@@ -51,11 +84,11 @@ if __name__ == "__main__":
     glfw.make_context_current(window)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    app = App()
     glfw.set_framebuffer_size_callback(window, framebuffer_size_callback)
-    # glfw.set_cursor_pos_callback(window, mouse_callback)
-    # glfw.set_scroll_callback(window, scroll_callback)
-
-    glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+    glfw.set_cursor_pos_callback(window, app.cursor_pos_callback)
+    glfw.set_mouse_button_callback(window, app.mouse_button_callback)
+    glfw.set_scroll_callback(window, app.scroll_callback)
 
     glEnable(GL_DEPTH_TEST)
 
@@ -381,18 +414,44 @@ if __name__ == "__main__":
     light_pos = glm.vec3(1.2, 1.0, 2.0)
 
     camera_position = glm.vec3(3.0, 1.0, 3.0)
+    camera_radians = glm.vec2(0.0, 0.0)
 
     while not glfw.window_should_close(window):
         current_frame = glfw.get_time()
         delta_time = current_frame - last_frame
         last_frame = current_frame
 
-        # process_input(window)
-
         glClearColor(0.1, 0.1, 0.1, 1.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
         projection = glm.perspective(glm.radians(45.0), 800 / 600, 0.1, 100.0)
+        cursor_position_change = app.current_cursor_position - app.last_cursor_position
+        smoothing = 0.1
+        if app.rotate_camera:
+            camera_radians.x += math.radians(smoothing * cursor_position_change.x)
+            camera_radians.x %= 2.0 * math.pi
+            camera_radians.y += math.radians(smoothing * cursor_position_change.y)
+            camera_radians.y %= 2.0 * math.pi
+
+        if (
+            app.rotate_camera
+            or app.current_scroll_offset.x != 0
+            or app.current_scroll_offset.y != 0
+        ):
+            camera_radius = (
+                np.linalg.norm(camera_position) + 0.1 * app.current_scroll_offset.y
+            )
+            camera_radius = np.clip(camera_radius, 0, 25.0)
+            camera_position = glm.vec3(
+                *update_orbit_camera_position(
+                    camera_radians[0],
+                    camera_radians[1],
+                    camera_radius,
+                )
+            )
+
+        app.current_scroll_offset.x = 0.0
+        app.current_scroll_offset.y = 0.0
         view = glm.lookAt(
             camera_position,
             glm.vec3(0.0, 0.0, 0.0),
@@ -431,7 +490,7 @@ if __name__ == "__main__":
 
         glUseProgram(lighting_shader)
         glUniform4f(
-            glGetUniformLocation(lighting_shader, "objectColor"), 0.0, 0.2, 1.0, 0.9
+            glGetUniformLocation(lighting_shader, "objectColor"), 0.0, 0.2, 1.0, 0.99
         )
         glUniform3f(glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0)
         glUniform3f(
