@@ -411,7 +411,6 @@ class App:
             light_cube_vertex_shader, light_cube_fragment_shader, validate=True
         )
 
-        delta_time = 0.0
         last_frame = 0.0
         light_pos = glm.vec3(1.2, 1.0, 2.0)
 
@@ -420,8 +419,6 @@ class App:
 
         while not glfw.window_should_close(window):
             current_frame = glfw.get_time()
-            delta_time = current_frame - last_frame
-            last_frame = current_frame
 
             glClearColor(0.1, 0.1, 0.1, 1.0)
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
