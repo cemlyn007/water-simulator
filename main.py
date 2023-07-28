@@ -29,7 +29,7 @@ def get_instance_model(i: int, j: int, t: float, n: int, m: int) -> glm.mat4:
     half_width = 0.5 * scale_width
     scale_vector = glm.vec3(
         scale_width,
-        1.5 * np.sin(np.radians(smoothing * (1 + i + j) * t, dtype=np.float32)),
+        1.5 * (np.sin(np.radians(smoothing * (1 + i + j) * t, dtype=np.float32)) + 1.0),
         scale_width,
     )
     model = glm.translate(
@@ -44,6 +44,122 @@ def get_instance_model(i: int, j: int, t: float, n: int, m: int) -> glm.mat4:
         scale_vector,
     )
     return model
+
+
+def cube_vertices_normals_and_indices():
+    vertices = [
+        # Front Face
+        (-0.5, -0.5, 0.5),
+        (0.5, -0.5, 0.5),
+        (0.5, 0.5, 0.5),
+        (-0.5, 0.5, 0.5),
+        # Back Face
+        (0.5, -0.5, -0.5),
+        (-0.5, -0.5, -0.5),
+        (-0.5, 0.5, -0.5),
+        (0.5, 0.5, -0.5),
+        # Top Face
+        (-0.5, 0.5, 0.5),
+        (0.5, 0.5, 0.5),
+        (0.5, 0.5, -0.5),
+        (-0.5, 0.5, -0.5),
+        # Bottom Face
+        (-0.5, -0.5, -0.5),
+        (0.5, -0.5, -0.5),
+        (0.5, -0.5, 0.5),
+        (-0.5, -0.5, 0.5),
+        # Right Face
+        (0.5, -0.5, 0.5),
+        (0.5, -0.5, -0.5),
+        (0.5, 0.5, -0.5),
+        (0.5, 0.5, 0.5),
+        # Left Face
+        (-0.5, -0.5, -0.5),
+        (-0.5, -0.5, 0.5),
+        (-0.5, 0.5, 0.5),
+        (-0.5, 0.5, -0.5),
+    ]
+
+    normals = [
+        # Front Face
+        (0, 0, 1),
+        (0, 0, 1),
+        (0, 0, 1),
+        (0, 0, 1),
+        # Back Face
+        (0, 0, -1),
+        (0, 0, -1),
+        (0, 0, -1),
+        (0, 0, -1),
+        # Top Face
+        (0, 1, 0),
+        (0, 1, 0),
+        (0, 1, 0),
+        (0, 1, 0),
+        # Bottom Face
+        (0, -1, 0),
+        (0, -1, 0),
+        (0, -1, 0),
+        (0, -1, 0),
+        # Right Face
+        (1, 0, 0),
+        (1, 0, 0),
+        (1, 0, 0),
+        (1, 0, 0),
+        # Left Face
+        (-1, 0, 0),
+        (-1, 0, 0),
+        (-1, 0, 0),
+        (-1, 0, 0),
+    ]
+
+    # Indices to form triangles for GL_TRIANGLES
+    indices = [
+        # Front Face
+        0,
+        1,
+        2,
+        2,
+        3,
+        0,
+        # Back Face
+        4,
+        5,
+        6,
+        6,
+        7,
+        4,
+        # Top Face
+        8,
+        9,
+        10,
+        10,
+        11,
+        8,
+        # Bottom Face
+        12,
+        13,
+        14,
+        14,
+        15,
+        12,
+        # Right Face
+        16,
+        17,
+        18,
+        18,
+        19,
+        16,
+        # Left Face
+        20,
+        21,
+        22,
+        22,
+        23,
+        20,
+    ]
+
+    return vertices, normals, indices
 
 
 class App:
@@ -116,6 +232,7 @@ class App:
             glfw.make_context_current(window)
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            glEnable(GL_CULL_FACE)
 
             glfw.set_framebuffer_size_callback(window, framebuffer_size_callback)
             glfw.set_cursor_pos_callback(window, self.cursor_pos_callback)
@@ -146,232 +263,33 @@ class App:
                     fragment_shader_source, GL_FRAGMENT_SHADER
                 )
 
-            vertices = np.array(
-                [
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    -0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    0.0,
-                    -1.0,
-                    -0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    -0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    -0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    0.0,
-                    1.0,
-                    -0.5,
-                    0.5,
-                    0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    0.5,
-                    -0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    0.5,
-                    0.5,
-                    -1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    -0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    -0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    -0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    1.0,
-                    0.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    -0.5,
-                    -0.5,
-                    -0.5,
-                    0.0,
-                    -1.0,
-                    0.0,
-                    -0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                    0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                    -0.5,
-                    0.5,
-                    0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                    -0.5,
-                    0.5,
-                    -0.5,
-                    0.0,
-                    1.0,
-                    0.0,
-                ],
-                dtype=np.float32,
+            vertices, normals, indices = cube_vertices_normals_and_indices()
+
+            vertex_data = []
+            for vertex, normal in zip(vertices, normals):
+                vertex_data.extend(vertex)
+                vertex_data.extend(normal)
+            vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
+
+            indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+            ebo = glGenBuffers(1)
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            glBufferData(
+                GL_ELEMENT_ARRAY_BUFFER,
+                np.array(indices, dtype=np.uint32).nbytes,
+                np.array(indices, dtype=np.uint32),
+                GL_STATIC_DRAW,
             )
 
             vbo = glGenBuffers(1)
 
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                glm.sizeof(vertex_data),
+                vertex_data.ptr,
+                GL_STATIC_DRAW,
+            )
 
             model_vbo = glGenBuffers(1)
             glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
@@ -389,10 +307,16 @@ class App:
             for instance_index in range(self._instances):
                 model_vao = glGenVertexArrays(1)
                 glBindVertexArray(model_vao)
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
 
                 glBindBuffer(GL_ARRAY_BUFFER, vbo)
                 glVertexAttribPointer(
-                    0, 3, GL_FLOAT, GL_FALSE, 6 * vertices.itemsize, ctypes.c_void_p(0)
+                    0,
+                    3,
+                    GL_FLOAT,
+                    GL_FALSE,
+                    6 * vertex_data.dt_size,
+                    ctypes.c_void_p(0),
                 )
                 glEnableVertexAttribArray(0)
 
@@ -401,8 +325,8 @@ class App:
                     3,
                     GL_FLOAT,
                     GL_FALSE,
-                    6 * vertices.itemsize,
-                    ctypes.c_void_p(3 * vertices.itemsize),
+                    6 * vertex_data.dt_size,
+                    ctypes.c_void_p(3 * vertex_data.dt_size),
                 )
                 glEnableVertexAttribArray(1)
                 glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
@@ -428,10 +352,12 @@ class App:
             light_cube_vao = glGenVertexArrays(1)
             glBindVertexArray(light_cube_vao)
 
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
 
             glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 6 * vertices.itemsize, ctypes.c_void_p(0)
+                0, 3, GL_FLOAT, GL_FALSE, 6 * vertex_data.dt_size, ctypes.c_void_p(0)
             )
             glEnableVertexAttribArray(0)
 
@@ -525,7 +451,7 @@ class App:
                 )
 
                 glBindVertexArray(light_cube_vao)
-                glDrawArrays(GL_TRIANGLES, 0, 36)
+                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, None)
 
                 glUseProgram(lighting_shader)
                 glUniform4f(
@@ -578,11 +504,13 @@ class App:
 
                 for instance_vao in model_vaos:
                     glBindVertexArray(instance_vao)
-                    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, self._instances)
+                    glDrawElementsInstanced(
+                        GL_TRIANGLES, 36, GL_UNSIGNED_INT, None, self._instances
+                    )
 
                 glfw.swap_buffers(window)
                 glfw.poll_events()
-        except KeyboardInterrupt:
+        finally:
             print("[GL] Terminating", flush=True)
             self._can_update_model.set()
             self._terminate.set()
@@ -591,7 +519,8 @@ class App:
 if __name__ == "__main__":
     import threading
 
-    app = App(15, 15)
+    n = 15
+    app = App(n, n)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
     app.render_forever()
