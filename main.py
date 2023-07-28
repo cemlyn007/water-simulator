@@ -213,7 +213,7 @@ class App:
             self._update_model.set()
             model = self._model_a if model is self._model_b else self._model_b
 
-    def render_forever(self):
+    def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
             glfw.init()
 
@@ -302,48 +302,43 @@ class App:
                 GL_DYNAMIC_DRAW,
             )
 
-            instance_models = []
-            model_vaos = []
-            for instance_index in range(self._instances):
-                model_vao = glGenVertexArrays(1)
-                glBindVertexArray(model_vao)
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            model_vao = glGenVertexArrays(1)
+            glBindVertexArray(model_vao)
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
 
-                glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glVertexAttribPointer(
+                0,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                6 * vertex_data.dt_size,
+                ctypes.c_void_p(0),
+            )
+            glEnableVertexAttribArray(0)
+
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                6 * vertex_data.dt_size,
+                ctypes.c_void_p(3 * vertex_data.dt_size),
+            )
+            glEnableVertexAttribArray(1)
+            glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+            for i in range(4):
+                index = 2 + i
                 glVertexAttribPointer(
-                    0,
-                    3,
+                    index,
+                    4,
                     GL_FLOAT,
                     GL_FALSE,
-                    6 * vertex_data.dt_size,
-                    ctypes.c_void_p(0),
+                    glm.sizeof(glm.mat4(1.0)),
+                    ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
                 )
-                glEnableVertexAttribArray(0)
-
-                glVertexAttribPointer(
-                    1,
-                    3,
-                    GL_FLOAT,
-                    GL_FALSE,
-                    6 * vertex_data.dt_size,
-                    ctypes.c_void_p(3 * vertex_data.dt_size),
-                )
-                glEnableVertexAttribArray(1)
-                glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
-                for i in range(4):
-                    index = 2 + i
-                    glVertexAttribPointer(
-                        index,
-                        4,
-                        GL_FLOAT,
-                        GL_FALSE,
-                        glm.sizeof(glm.mat4(1.0)),
-                        ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
-                    )
-                    glVertexAttribDivisor(index, 1)
-                    glEnableVertexAttribArray(index)
-                instance_models.append(glm.mat4(1.0))
-                model_vaos.append(model_vao)
+                glVertexAttribDivisor(index, 1)
+                glEnableVertexAttribArray(index)
 
             lighting_shader = shaders.compileProgram(
                 vertex_shader, fragment_shader, validate=True
@@ -365,12 +360,14 @@ class App:
                 light_cube_vertex_shader, light_cube_fragment_shader, validate=True
             )
 
-            light_pos = glm.vec3(1.2, 1.0, 2.0)
+            light_pos = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 1.0, 3.0)
             camera_radians = glm.vec2(0.0, 0.0)
 
-            while not glfw.window_should_close(window):
+            while (
+                not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
+            ):
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
@@ -502,11 +499,10 @@ class App:
                     )
                     self._can_update_model.set()
 
-                for instance_vao in model_vaos:
-                    glBindVertexArray(instance_vao)
-                    glDrawElementsInstanced(
-                        GL_TRIANGLES, 36, GL_UNSIGNED_INT, None, self._instances
-                    )
+                glBindVertexArray(model_vao)
+                glDrawElementsInstanced(
+                    GL_TRIANGLES, 36, GL_UNSIGNED_INT, None, self._instances
+                )
 
                 glfw.swap_buffers(window)
                 glfw.poll_events()
@@ -514,14 +510,16 @@ class App:
             print("[GL] Terminating", flush=True)
             self._can_update_model.set()
             self._terminate.set()
+            glfw.terminate()
 
 
 if __name__ == "__main__":
     import threading
 
-    n = 15
+    n = 100
     app = App(n, n)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
-    app.render_forever()
+    # app.render_until(10.0)
+    app.render_until()
     simulation_thread.join()
