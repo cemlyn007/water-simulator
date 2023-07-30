@@ -22,28 +22,29 @@ def framebuffer_size_callback(window, width, height):
     glViewport(0, 0, width, height)
 
 
-def get_instance_model(i: int, j: int, t: float, n: int, m: int) -> glm.mat4:
-    smoothing = 0.1
-    scale_width = 0.05
-    full_width = 1.0 * scale_width
-    half_width = 0.5 * scale_width
-    scale_vector = glm.vec3(
-        scale_width,
-        1.5 * (np.sin(np.radians(smoothing * (1 + i + j) * t, dtype=np.float32)) + 1.0),
-        scale_width,
-    )
-    model = glm.translate(
-        glm.vec3(
-            full_width * i - ((full_width * n) / 2.0) + half_width,
-            scale_vector.y / 2,
-            full_width * j - ((full_width * m) / 2.0) + half_width,
-        ),
-    )
-    model = glm.scale(
-        model,
-        scale_vector,
-    )
-    return model
+def get_xz_translate(n: int, m: int, cube_width: float) -> np.ndarray[any, np.float32]:
+    full_width = 1.0 * cube_width
+    half_width = 0.5 * cube_width
+    translate = []
+    index = 0
+    for i in range(n):
+        for j in range(m):
+            translate.extend(
+                [
+                    # X coordinate.
+                    full_width * i - ((full_width * n) / 2.0) + half_width,
+                    # Z coordinate.
+                    full_width * j - ((full_width * m) / 2.0) + half_width,
+                ]
+            )
+            index += 1
+    return np.array(translate, dtype=np.float32)
+
+
+def get_y_scale(
+    i: np.ndarray[any, np.float32], j: np.ndarray[any, np.float32], t: float
+) -> np.ndarray[any, np.float32]:
+    return 1.5 * (np.sin(np.radians(0.1 * (1 + i + j) * t, dtype=np.float32)) + 1.0)
 
 
 def cube_vertices_normals_and_indices():
@@ -174,9 +175,7 @@ class App:
         self._can_update_model = threading.Event()
         self._update_model = threading.Event()
         self._terminate = threading.Event()
-        self._model_a = glm.array([glm.mat4(1.0)] * self._instances, dtype=glm.mat4)
-        self._model_b = glm.array([glm.mat4(1.0)] * self._instances, dtype=glm.mat4)
-        self._model = self._model_a
+        self._model_y = np.zeros(self._instances, dtype=np.float32)
 
     def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
         self.last_cursor_position.x = self.current_cursor_position.x
@@ -195,23 +194,25 @@ class App:
 
     def simulation_thread(self) -> None:
         self._can_update_model.set()
-        model = self._model_a
+
+        i = np.arange(self._n, dtype=np.float32)
+        j = np.arange(self._m, dtype=np.float32)
+
+        i, j = np.meshgrid(i, j, indexing="ij")
+        i = i.flatten()
+        j = j.flatten()
+
         while True:
             t = time.monotonic()
-            index = 0
-            for i in range(self._n):
-                for j in range(self._m):
-                    model[index] = get_instance_model(i, j, t, self._n, self._m)
-                    index += 1
+            y_scale = get_y_scale(i, j, t)
             self._can_update_model.wait()
             self._can_update_model.clear()
             if self._terminate.is_set():
                 print("[SIM] Terminating", flush=True)
                 break
             # else...
-            self._model = model
+            self._model_y = y_scale
             self._update_model.set()
-            model = self._model_a if model is self._model_b else self._model_b
 
     def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
@@ -291,14 +292,36 @@ class App:
                 GL_STATIC_DRAW,
             )
 
-            model_vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+            cube_width = 0.05
+
+            model_scale_xz_vbo = glGenBuffers(1)
+            xz_scale = np.array(cube_width, dtype=np.float32)
+            xz_scale = np.tile(xz_scale, self._instances)
+            glBindBuffer(GL_ARRAY_BUFFER, model_scale_xz_vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
-                glm.sizeof(
-                    glm.array([glm.mat4(1.0)] * self._instances, dtype=glm.mat4)
-                ),
-                None,
+                xz_scale.nbytes,
+                xz_scale,
+                GL_STATIC_DRAW,
+            )
+
+            model_translate_xz_vbo = glGenBuffers(1)
+            xz_translate = get_xz_translate(self._n, self._m, cube_width)
+            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                xz_translate.nbytes,
+                xz_translate,
+                GL_STATIC_DRAW,
+            )
+
+            model_y_vbo = glGenBuffers(1)
+            glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
+            # First half will be y translations, second half will be y scales.
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                self._model_y.nbytes,
+                self._model_y,
                 GL_DYNAMIC_DRAW,
             )
 
@@ -326,19 +349,45 @@ class App:
                 ctypes.c_void_p(3 * vertex_data.dt_size),
             )
             glEnableVertexAttribArray(1)
-            glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
-            for i in range(4):
-                index = 2 + i
-                glVertexAttribPointer(
-                    index,
-                    4,
-                    GL_FLOAT,
-                    GL_FALSE,
-                    glm.sizeof(glm.mat4(1.0)),
-                    ctypes.c_void_p(i * glm.sizeof(glm.vec4(1.0))),
-                )
-                glVertexAttribDivisor(index, 1)
-                glEnableVertexAttribArray(index)
+
+            # aInstanceTranslateX
+            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
+            glVertexAttribPointer(
+                2,
+                1,
+                GL_FLOAT,
+                GL_FALSE,
+                2 * xz_translate.itemsize,
+                None,
+            )
+            glEnableVertexAttribArray(2)
+            glVertexAttribDivisor(2, 1)
+
+            # aInstanceTranslateZ
+            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
+            glVertexAttribPointer(
+                3,
+                1,
+                GL_FLOAT,
+                GL_FALSE,
+                2 * xz_translate.itemsize,
+                ctypes.c_void_p(1 * xz_translate.itemsize),
+            )
+            glEnableVertexAttribArray(3)
+            glVertexAttribDivisor(3, 1)
+
+            # aInstanceScaleY
+            glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
+            glVertexAttribPointer(
+                4,
+                1,
+                GL_FLOAT,
+                GL_FALSE,
+                self._model_y.itemsize,
+                None,
+            )
+            glEnableVertexAttribArray(4)
+            glVertexAttribDivisor(4, 1)
 
             lighting_shader = shaders.compileProgram(
                 vertex_shader, fragment_shader, validate=True
@@ -475,6 +524,9 @@ class App:
                     camera_position.z,
                 )
 
+                glUniform1f(
+                    glGetUniformLocation(lighting_shader, "cubeWidth"), cube_width
+                )
                 glUniformMatrix4fv(
                     glGetUniformLocation(lighting_shader, "projection"),
                     1,
@@ -490,12 +542,12 @@ class App:
 
                 if self._update_model.is_set():
                     self._update_model.clear()
-                    glBindBuffer(GL_ARRAY_BUFFER, model_vbo)
+                    glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
                     glBufferSubData(
                         GL_ARRAY_BUFFER,
                         0,
-                        glm.sizeof(self._model),
-                        self._model.ptr,
+                        self._model_y.nbytes,
+                        self._model_y,
                     )
                     self._can_update_model.set()
 
@@ -514,12 +566,9 @@ class App:
 
 
 if __name__ == "__main__":
-    import threading
-
-    n = 100
+    n = 1000
     app = App(n, n)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
-    # app.render_until(10.0)
     app.render_until()
     simulation_thread.join()
