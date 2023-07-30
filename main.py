@@ -417,6 +417,7 @@ class App:
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
+                start = glfw.get_time()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
@@ -558,6 +559,9 @@ class App:
 
                 glfw.swap_buffers(window)
                 glfw.poll_events()
+                end = glfw.get_time()
+                cost = end - start
+                print(f"[GL] Frame cost: {cost*1000.:.2f}ms")
         finally:
             print("[GL] Terminating", flush=True)
             self._can_update_model.set()
