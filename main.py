@@ -46,11 +46,19 @@ def get_y_scale_inplace(
     i: np.ndarray[any, np.float32],
     j: np.ndarray[any, np.float32],
     t: float,
+    cache: dict[str, np.ndarray[any, np.float32]],
 ) -> None:
-    np.radians(0.1 * (1 + i + j) * t, dtype=np.float32, out=arr)
+    if not cache:
+        cache["_ij"] = np.multiply(2 * np.pi * 0.0001, i) + np.multiply(
+            2 * np.pi * 0.001, j
+        )
+        cache["_tmp"] = np.empty_like(i)
+
+    np.multiply(-2 * np.pi * 0.1, t, out=cache["_tmp"])
+    np.add(cache["_ij"], cache["_tmp"], out=arr)
     np.sin(arr, out=arr)
+    np.multiply(0.25, arr, out=arr)
     np.add(arr, 1.0, out=arr)
-    np.multiply(arr, 1.5, out=arr)
 
 
 def cube_vertices_normals_and_indices():
@@ -170,9 +178,10 @@ def cube_vertices_normals_and_indices():
 
 
 class App:
-    def __init__(self, n: int, m: int):
+    def __init__(self, n: int, m: int, cube_width: float) -> None:
         self._n = n
         self._m = m
+        self._cube_width = cube_width
         self._instances = n * m
         self.current_cursor_position = glm.vec2(0.0, 0.0)
         self.last_cursor_position = glm.vec2(0.0, 0.0)
@@ -212,9 +221,10 @@ class App:
 
         y_scale = self._model_y_a
 
+        cache = {}
         while True:
             t = time.monotonic()
-            get_y_scale_inplace(y_scale, i, j, t)
+            get_y_scale_inplace(y_scale, i, j, t, cache)
             self._can_update_model.wait()
             self._can_update_model.clear()
             if self._terminate.is_set():
@@ -305,10 +315,8 @@ class App:
                 GL_STATIC_DRAW,
             )
 
-            cube_width = 0.05
-
             model_scale_xz_vbo = glGenBuffers(1)
-            xz_scale = np.array(cube_width, dtype=np.float32)
+            xz_scale = np.array(self._cube_width, dtype=np.float32)
             xz_scale = np.tile(xz_scale, self._instances)
             glBindBuffer(GL_ARRAY_BUFFER, model_scale_xz_vbo)
             glBufferData(
@@ -319,7 +327,7 @@ class App:
             )
 
             model_translate_xz_vbo = glGenBuffers(1)
-            xz_translate = get_xz_translate(self._n, self._m, cube_width)
+            xz_translate = get_xz_translate(self._n, self._m, self._cube_width)
             glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
@@ -429,7 +437,7 @@ class App:
 
             view = glm.lookAt(
                 camera_position,
-                glm.vec3(0.0, 0.0, 0.0),
+                glm.vec3(0.0, 0.5, 0.0),
                 glm.vec3(0.0, 1.0, 0.0),
             )
             projection = glm.perspective(glm.radians(45.0), 800 / 600, 0.1, 100.0)
@@ -477,7 +485,9 @@ class App:
             glUniform3f(
                 glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0
             )
-            glUniform1f(glGetUniformLocation(lighting_shader, "cubeWidth"), cube_width)
+            glUniform1f(
+                glGetUniformLocation(lighting_shader, "cubeWidth"), self._cube_width
+            )
             glUniform3f(
                 glGetUniformLocation(lighting_shader, "viewPos"),
                 camera_position.x,
@@ -535,7 +545,11 @@ class App:
                         np.linalg.norm(camera_position)
                         + 0.1 * self.current_scroll_offset.y
                     )
-                    np.clip(camera_radius, 0, 25.0, out=camera_radius)
+                    camera_radius = np.clip(
+                        camera_radius,
+                        0,
+                        25.0,
+                    )
                     camera_position = glm.vec3(
                         *update_orbit_camera_position(
                             camera_radians[0],
@@ -552,7 +566,7 @@ class App:
                 if camera_changed:
                     view = glm.lookAt(
                         camera_position,
-                        glm.vec3(0.0, 0.0, 0.0),
+                        glm.vec3(0.0, 0.5, 0.0),
                         glm.vec3(0.0, 1.0, 0.0),
                     )
 
@@ -603,7 +617,7 @@ class App:
                 glfw.poll_events()
                 end = glfw.get_time()
                 cost = end - start
-                print(f"[GL] Frame cost: {cost*1000.:.2f}ms")
+                # print(f"[GL] Frame cost: {cost*1000.:.2f}ms")
         finally:
             print("[GL] Terminating", flush=True)
             self._can_update_model.set()
@@ -612,8 +626,9 @@ class App:
 
 
 if __name__ == "__main__":
+    n = 500
     print(f"Using {n*n} instances", flush=True)
-    app = App(n, n)
+    app = App(n, n, 0.001)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
     app.render_until()
