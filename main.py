@@ -41,10 +41,16 @@ def get_xz_translate(n: int, m: int, cube_width: float) -> np.ndarray[any, np.fl
     return np.array(translate, dtype=np.float32)
 
 
-def get_y_scale(
-    i: np.ndarray[any, np.float32], j: np.ndarray[any, np.float32], t: float
-) -> np.ndarray[any, np.float32]:
-    return 1.5 * (np.sin(np.radians(0.1 * (1 + i + j) * t, dtype=np.float32)) + 1.0)
+def get_y_scale_inplace(
+    arr: np.ndarray[any, np.float32],
+    i: np.ndarray[any, np.float32],
+    j: np.ndarray[any, np.float32],
+    t: float,
+) -> None:
+    np.radians(0.1 * (1 + i + j) * t, dtype=np.float32, out=arr)
+    np.sin(arr, out=arr)
+    np.add(arr, 1.0, out=arr)
+    np.multiply(arr, 1.5, out=arr)
 
 
 def cube_vertices_normals_and_indices():
@@ -176,6 +182,8 @@ class App:
         self._update_model = threading.Event()
         self._terminate = threading.Event()
         self._model_y = np.zeros(self._instances, dtype=np.float32)
+        self._model_y_a = np.zeros(self._instances, dtype=np.float32)
+        self._model_y_b = np.zeros(self._instances, dtype=np.float32)
 
     def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
         self.last_cursor_position.x = self.current_cursor_position.x
@@ -202,9 +210,11 @@ class App:
         i = i.flatten()
         j = j.flatten()
 
+        y_scale = self._model_y_a
+
         while True:
             t = time.monotonic()
-            y_scale = get_y_scale(i, j, t)
+            get_y_scale_inplace(y_scale, i, j, t)
             self._can_update_model.wait()
             self._can_update_model.clear()
             if self._terminate.is_set():
@@ -213,6 +223,8 @@ class App:
             # else...
             self._model_y = y_scale
             self._update_model.set()
+
+            y_scale = self._model_y_b if y_scale is self._model_y_a else self._model_y_a
 
     def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
@@ -523,7 +535,7 @@ class App:
                         np.linalg.norm(camera_position)
                         + 0.1 * self.current_scroll_offset.y
                     )
-                    camera_radius = np.clip(camera_radius, 0, 25.0)
+                    np.clip(camera_radius, 0, 25.0, out=camera_radius)
                     camera_position = glm.vec3(
                         *update_orbit_camera_position(
                             camera_radians[0],
@@ -600,7 +612,7 @@ class App:
 
 
 if __name__ == "__main__":
-    n = 1000
+    print(f"Using {n*n} instances", flush=True)
     app = App(n, n)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
