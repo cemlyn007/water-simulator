@@ -231,6 +231,7 @@ class App:
                 sys.exit(-1)
 
             glfw.make_context_current(window)
+            glfw.swap_interval(0)
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
             glEnable(GL_CULL_FACE)
@@ -414,6 +415,83 @@ class App:
             camera_position = glm.vec3(3.0, 1.0, 3.0)
             camera_radians = glm.vec2(0.0, 0.0)
 
+            view = glm.lookAt(
+                camera_position,
+                glm.vec3(0.0, 0.0, 0.0),
+                glm.vec3(0.0, 1.0, 0.0),
+            )
+            projection = glm.perspective(glm.radians(45.0), 800 / 600, 0.1, 100.0)
+
+            glUseProgram(light_cube_shader)
+            glUniformMatrix4fv(
+                glGetUniformLocation(light_cube_shader, "projection"),
+                1,
+                GL_FALSE,
+                glm.value_ptr(projection),
+            )
+            glUniform3f(
+                glGetUniformLocation(light_cube_shader, "objectColor"),
+                1.0,
+                1.0,
+                1.0,
+            )
+            glUniformMatrix4fv(
+                glGetUniformLocation(light_cube_shader, "view"),
+                1,
+                GL_FALSE,
+                glm.value_ptr(view),
+            )
+            model = glm.mat4(1.0)
+            model = glm.translate(
+                model, glm.vec3(light_pos[0], light_pos[1], light_pos[2])
+            )
+            model = glm.scale(model, glm.vec3(0.2))
+
+            glUniformMatrix4fv(
+                glGetUniformLocation(light_cube_shader, "model"),
+                1,
+                GL_FALSE,
+                glm.value_ptr(model),
+            )
+
+            glUseProgram(lighting_shader)
+            glUniform4f(
+                glGetUniformLocation(lighting_shader, "objectColor"),
+                0.0,
+                0.2,
+                1.0,
+                1.0,
+            )
+            glUniform3f(
+                glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0
+            )
+            glUniform1f(glGetUniformLocation(lighting_shader, "cubeWidth"), cube_width)
+            glUniform3f(
+                glGetUniformLocation(lighting_shader, "viewPos"),
+                camera_position.x,
+                camera_position.y,
+                camera_position.z,
+            )
+            glUniformMatrix4fv(
+                glGetUniformLocation(lighting_shader, "view"),
+                1,
+                GL_FALSE,
+                glm.value_ptr(view),
+            )
+            glUniformMatrix4fv(
+                glGetUniformLocation(lighting_shader, "projection"),
+                1,
+                GL_FALSE,
+                glm.value_ptr(projection),
+            )
+            glUniform3f(
+                glGetUniformLocation(lighting_shader, "lightPos"),
+                light_pos[0],
+                light_pos[1],
+                light_pos[2],
+            )
+
+            smoothing = 0.1
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
@@ -421,11 +499,9 @@ class App:
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-                projection = glm.perspective(glm.radians(45.0), 800 / 600, 0.1, 100.0)
                 cursor_position_change = (
                     self.current_cursor_position - self.last_cursor_position
                 )
-                smoothing = 0.1
                 if self.rotate_camera:
                     camera_radians.x += math.radians(
                         smoothing * cursor_position_change.x
@@ -436,11 +512,13 @@ class App:
                     )
                     camera_radians.y %= 2.0 * math.pi
 
-                if (
+                camera_changed = (
                     self.rotate_camera
                     or self.current_scroll_offset.x != 0
                     or self.current_scroll_offset.y != 0
-                ):
+                )
+
+                if camera_changed:
                     camera_radius = (
                         np.linalg.norm(camera_position)
                         + 0.1 * self.current_scroll_offset.y
@@ -459,87 +537,39 @@ class App:
                 self.last_cursor_position.x = self.current_cursor_position.x
                 self.last_cursor_position.y = self.current_cursor_position.y
 
-                view = glm.lookAt(
-                    camera_position,
-                    glm.vec3(0.0, 0.0, 0.0),
-                    glm.vec3(0.0, 1.0, 0.0),
-                )
+                if camera_changed:
+                    view = glm.lookAt(
+                        camera_position,
+                        glm.vec3(0.0, 0.0, 0.0),
+                        glm.vec3(0.0, 1.0, 0.0),
+                    )
 
                 glUseProgram(light_cube_shader)
-                glUniformMatrix4fv(
-                    glGetUniformLocation(light_cube_shader, "projection"),
-                    1,
-                    GL_FALSE,
-                    glm.value_ptr(projection),
-                )
-                glUniformMatrix4fv(
-                    glGetUniformLocation(light_cube_shader, "view"),
-                    1,
-                    GL_FALSE,
-                    glm.value_ptr(view),
-                )
-                model = glm.mat4(1.0)
-                model = glm.translate(
-                    model, glm.vec3(light_pos[0], light_pos[1], light_pos[2])
-                )
-                model = glm.scale(model, glm.vec3(0.2))
-
-                glUniformMatrix4fv(
-                    glGetUniformLocation(light_cube_shader, "model"),
-                    1,
-                    GL_FALSE,
-                    glm.value_ptr(model),
-                )
-                glUniform3f(
-                    glGetUniformLocation(light_cube_shader, "objectColor"),
-                    1.0,
-                    1.0,
-                    1.0,
-                )
+                if camera_changed:
+                    glUniformMatrix4fv(
+                        glGetUniformLocation(light_cube_shader, "view"),
+                        1,
+                        GL_FALSE,
+                        glm.value_ptr(view),
+                    )
 
                 glBindVertexArray(light_cube_vao)
                 glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, None)
 
                 glUseProgram(lighting_shader)
-                glUniform4f(
-                    glGetUniformLocation(lighting_shader, "objectColor"),
-                    0.0,
-                    0.2,
-                    1.0,
-                    1.0,
-                )
-                glUniform3f(
-                    glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0
-                )
-                glUniform3f(
-                    glGetUniformLocation(lighting_shader, "lightPos"),
-                    light_pos[0],
-                    light_pos[1],
-                    light_pos[2],
-                )
-
-                glUniform3f(
-                    glGetUniformLocation(lighting_shader, "viewPos"),
-                    camera_position.x,
-                    camera_position.y,
-                    camera_position.z,
-                )
-
-                glUniform1f(
-                    glGetUniformLocation(lighting_shader, "cubeWidth"), cube_width
-                )
-                glUniformMatrix4fv(
-                    glGetUniformLocation(lighting_shader, "projection"),
-                    1,
-                    GL_FALSE,
-                    glm.value_ptr(projection),
-                )
-                glUniformMatrix4fv(
-                    glGetUniformLocation(lighting_shader, "view"),
-                    1,
-                    GL_FALSE,
-                    glm.value_ptr(view),
-                )
+                if camera_changed:
+                    glUniform3f(
+                        glGetUniformLocation(lighting_shader, "viewPos"),
+                        camera_position.x,
+                        camera_position.y,
+                        camera_position.z,
+                    )
+                    glUniformMatrix4fv(
+                        glGetUniformLocation(lighting_shader, "view"),
+                        1,
+                        GL_FALSE,
+                        glm.value_ptr(view),
+                    )
 
                 if self._update_model.is_set():
                     self._update_model.clear()
