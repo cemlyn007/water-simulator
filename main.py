@@ -7,6 +7,7 @@ import glm
 import threading
 import math
 import time
+import meshes
 
 
 def update_orbit_camera_position(
@@ -59,122 +60,6 @@ def get_y_scale_inplace(
     np.sin(arr, out=arr)
     np.multiply(0.25, arr, out=arr)
     np.add(arr, 1.0, out=arr)
-
-
-def cube_vertices_normals_and_indices():
-    vertices = [
-        # Front Face
-        (-0.5, -0.5, 0.5),
-        (0.5, -0.5, 0.5),
-        (0.5, 0.5, 0.5),
-        (-0.5, 0.5, 0.5),
-        # Back Face
-        (0.5, -0.5, -0.5),
-        (-0.5, -0.5, -0.5),
-        (-0.5, 0.5, -0.5),
-        (0.5, 0.5, -0.5),
-        # Top Face
-        (-0.5, 0.5, 0.5),
-        (0.5, 0.5, 0.5),
-        (0.5, 0.5, -0.5),
-        (-0.5, 0.5, -0.5),
-        # Bottom Face
-        (-0.5, -0.5, -0.5),
-        (0.5, -0.5, -0.5),
-        (0.5, -0.5, 0.5),
-        (-0.5, -0.5, 0.5),
-        # Right Face
-        (0.5, -0.5, 0.5),
-        (0.5, -0.5, -0.5),
-        (0.5, 0.5, -0.5),
-        (0.5, 0.5, 0.5),
-        # Left Face
-        (-0.5, -0.5, -0.5),
-        (-0.5, -0.5, 0.5),
-        (-0.5, 0.5, 0.5),
-        (-0.5, 0.5, -0.5),
-    ]
-
-    normals = [
-        # Front Face
-        (0, 0, 1),
-        (0, 0, 1),
-        (0, 0, 1),
-        (0, 0, 1),
-        # Back Face
-        (0, 0, -1),
-        (0, 0, -1),
-        (0, 0, -1),
-        (0, 0, -1),
-        # Top Face
-        (0, 1, 0),
-        (0, 1, 0),
-        (0, 1, 0),
-        (0, 1, 0),
-        # Bottom Face
-        (0, -1, 0),
-        (0, -1, 0),
-        (0, -1, 0),
-        (0, -1, 0),
-        # Right Face
-        (1, 0, 0),
-        (1, 0, 0),
-        (1, 0, 0),
-        (1, 0, 0),
-        # Left Face
-        (-1, 0, 0),
-        (-1, 0, 0),
-        (-1, 0, 0),
-        (-1, 0, 0),
-    ]
-
-    # Indices to form triangles for GL_TRIANGLES
-    indices = [
-        # Front Face
-        0,
-        1,
-        2,
-        2,
-        3,
-        0,
-        # Back Face
-        4,
-        5,
-        6,
-        6,
-        7,
-        4,
-        # Top Face
-        8,
-        9,
-        10,
-        10,
-        11,
-        8,
-        # Bottom Face
-        12,
-        13,
-        14,
-        14,
-        15,
-        12,
-        # Right Face
-        16,
-        17,
-        18,
-        18,
-        19,
-        16,
-        # Left Face
-        20,
-        21,
-        22,
-        22,
-        23,
-        20,
-    ]
-
-    return vertices, normals, indices
 
 
 class App:
@@ -265,7 +150,9 @@ class App:
 
             glEnable(GL_DEPTH_TEST)
 
-            vertices, normals, indices = cube_vertices_normals_and_indices()
+            light = meshes.Light()
+
+            vertices, normals, indices = meshes.cube_vertices_normals_and_indices()
 
             vertex_data = []
             for vertex, normal in zip(vertices, normals):
@@ -402,32 +289,6 @@ class App:
                 vertex_shader, fragment_shader, validate=True
             )
 
-            light_cube_vao = glGenVertexArrays(1)
-            glBindVertexArray(light_cube_vao)
-
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-
-            glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 6 * vertex_data.dt_size, ctypes.c_void_p(0)
-            )
-            glEnableVertexAttribArray(0)
-
-            with open("shaders/light_cube.vs", "r") as file:
-                vertex_shader_source = file.read()
-                light_cube_vertex_shader = shaders.compileShader(
-                    vertex_shader_source, GL_VERTEX_SHADER
-                )
-            with open("shaders/light_cube.fs", "r") as file:
-                fragment_shader_source = file.read()
-                light_cube_fragment_shader = shaders.compileShader(
-                    fragment_shader_source, GL_FRAGMENT_SHADER
-                )
-            light_cube_shader = shaders.compileProgram(
-                light_cube_vertex_shader, light_cube_fragment_shader, validate=True
-            )
-
             light_pos = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 1.0, 3.0)
@@ -440,37 +301,15 @@ class App:
             )
             projection = glm.perspective(glm.radians(45.0), 800 / 600, 0.1, 100.0)
 
-            glUseProgram(light_cube_shader)
-            glUniformMatrix4fv(
-                glGetUniformLocation(light_cube_shader, "projection"),
-                1,
-                GL_FALSE,
-                glm.value_ptr(projection),
-            )
-            glUniform3f(
-                glGetUniformLocation(light_cube_shader, "objectColor"),
-                1.0,
-                1.0,
-                1.0,
-            )
-            glUniformMatrix4fv(
-                glGetUniformLocation(light_cube_shader, "view"),
-                1,
-                GL_FALSE,
-                glm.value_ptr(view),
-            )
+            light.set_projection(projection)
+            light.set_color(glm.vec3(1.0, 1.0, 1.0))
+            light.set_view(view)
             model = glm.mat4(1.0)
             model = glm.translate(
                 model, glm.vec3(light_pos[0], light_pos[1], light_pos[2])
             )
             model = glm.scale(model, glm.vec3(0.2))
-
-            glUniformMatrix4fv(
-                glGetUniformLocation(light_cube_shader, "model"),
-                1,
-                GL_FALSE,
-                glm.value_ptr(model),
-            )
+            light.set_model(model)
 
             glUseProgram(lighting_shader)
             glUniform4f(
@@ -568,17 +407,9 @@ class App:
                         glm.vec3(0.0, 1.0, 0.0),
                     )
 
-                glUseProgram(light_cube_shader)
                 if camera_changed:
-                    glUniformMatrix4fv(
-                        glGetUniformLocation(light_cube_shader, "view"),
-                        1,
-                        GL_FALSE,
-                        glm.value_ptr(view),
-                    )
-
-                glBindVertexArray(light_cube_vao)
-                glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, None)
+                    light.set_view(view)
+                light.draw()
 
                 glUseProgram(lighting_shader)
                 if camera_changed:
@@ -624,9 +455,9 @@ class App:
 
 
 if __name__ == "__main__":
-    n = 500
+    n = 1000
     print(f"Using {n*n} instances", flush=True)
-    app = App(n, n, 0.001)
+    app = App(n, n, 0.005)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
     app.render_until()
