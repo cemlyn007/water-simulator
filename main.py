@@ -265,28 +265,6 @@ class App:
 
             glEnable(GL_DEPTH_TEST)
 
-            with open("shaders/basic_lighting.vs", "r") as file:
-                vertex_shader_source = file.read()
-                vertex_shader = shaders.compileShader(
-                    vertex_shader_source, GL_VERTEX_SHADER
-                )
-            with open("shaders/basic_lighting.fs", "r") as file:
-                fragment_shader_source = file.read()
-                fragment_shader = shaders.compileShader(
-                    fragment_shader_source, GL_FRAGMENT_SHADER
-                )
-
-            with open("shaders/light_cube.vs", "r") as file:
-                vertex_shader_source = file.read()
-                light_cube_vertex_shader = shaders.compileShader(
-                    vertex_shader_source, GL_VERTEX_SHADER
-                )
-            with open("shaders/light_cube.fs", "r") as file:
-                fragment_shader_source = file.read()
-                light_cube_fragment_shader = shaders.compileShader(
-                    fragment_shader_source, GL_FRAGMENT_SHADER
-                )
-
             vertices, normals, indices = cube_vertices_normals_and_indices()
 
             vertex_data = []
@@ -410,6 +388,16 @@ class App:
             glEnableVertexAttribArray(4)
             glVertexAttribDivisor(4, 1)
 
+            with open("shaders/basic_lighting.vs", "r") as file:
+                vertex_shader_source = file.read()
+                vertex_shader = shaders.compileShader(
+                    vertex_shader_source, GL_VERTEX_SHADER
+                )
+            with open("shaders/basic_lighting.fs", "r") as file:
+                fragment_shader_source = file.read()
+                fragment_shader = shaders.compileShader(
+                    fragment_shader_source, GL_FRAGMENT_SHADER
+                )
             lighting_shader = shaders.compileProgram(
                 vertex_shader, fragment_shader, validate=True
             )
@@ -426,6 +414,16 @@ class App:
             )
             glEnableVertexAttribArray(0)
 
+            with open("shaders/light_cube.vs", "r") as file:
+                vertex_shader_source = file.read()
+                light_cube_vertex_shader = shaders.compileShader(
+                    vertex_shader_source, GL_VERTEX_SHADER
+                )
+            with open("shaders/light_cube.fs", "r") as file:
+                fragment_shader_source = file.read()
+                light_cube_fragment_shader = shaders.compileShader(
+                    fragment_shader_source, GL_FRAGMENT_SHADER
+                )
             light_cube_shader = shaders.compileProgram(
                 light_cube_vertex_shader, light_cube_fragment_shader, validate=True
             )
