@@ -1,6 +1,5 @@
 import glfw
 from OpenGL.GL import *
-from OpenGL.GL import shaders
 import sys
 import numpy as np
 import glm
@@ -21,25 +20,6 @@ def update_orbit_camera_position(
 
 def framebuffer_size_callback(window, width, height):
     glViewport(0, 0, width, height)
-
-
-def get_xz_translate(n: int, m: int, cube_width: float) -> np.ndarray[any, np.float32]:
-    full_width = 1.0 * cube_width
-    half_width = 0.5 * cube_width
-    translate = []
-    index = 0
-    for i in range(n):
-        for j in range(m):
-            translate.extend(
-                [
-                    # X coordinate.
-                    full_width * i - ((full_width * n) / 2.0) + half_width,
-                    # Z coordinate.
-                    full_width * j - ((full_width * m) / 2.0) + half_width,
-                ]
-            )
-            index += 1
-    return np.array(translate, dtype=np.float32)
 
 
 def get_y_scale_inplace(
@@ -151,145 +131,9 @@ class App:
             glEnable(GL_DEPTH_TEST)
 
             light = meshes.Light()
+            water = meshes.Water(self._n, self._m, self._cube_width)
 
-            vertices, normals, indices = meshes.cube_vertices_normals_and_indices()
-
-            vertex_data = []
-            for vertex, normal in zip(vertices, normals):
-                vertex_data.extend(vertex)
-                vertex_data.extend(normal)
-            vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
-
-            indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
-            ebo = glGenBuffers(1)
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-            glBufferData(
-                GL_ELEMENT_ARRAY_BUFFER,
-                np.array(indices, dtype=np.uint32).nbytes,
-                np.array(indices, dtype=np.uint32),
-                GL_STATIC_DRAW,
-            )
-
-            vbo = glGenBuffers(1)
-
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                glm.sizeof(vertex_data),
-                vertex_data.ptr,
-                GL_STATIC_DRAW,
-            )
-
-            model_scale_xz_vbo = glGenBuffers(1)
-            xz_scale = np.array(self._cube_width, dtype=np.float32)
-            xz_scale = np.tile(xz_scale, self._instances)
-            glBindBuffer(GL_ARRAY_BUFFER, model_scale_xz_vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                xz_scale.nbytes,
-                xz_scale,
-                GL_STATIC_DRAW,
-            )
-
-            model_translate_xz_vbo = glGenBuffers(1)
-            xz_translate = get_xz_translate(self._n, self._m, self._cube_width)
-            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                xz_translate.nbytes,
-                xz_translate,
-                GL_STATIC_DRAW,
-            )
-
-            model_y_vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
-            # First half will be y translations, second half will be y scales.
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                self._model_y.nbytes,
-                self._model_y,
-                GL_DYNAMIC_DRAW,
-            )
-
-            model_vao = glGenVertexArrays(1)
-            glBindVertexArray(model_vao)
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glVertexAttribPointer(
-                0,
-                3,
-                GL_FLOAT,
-                GL_FALSE,
-                6 * vertex_data.dt_size,
-                ctypes.c_void_p(0),
-            )
-            glEnableVertexAttribArray(0)
-
-            glVertexAttribPointer(
-                1,
-                3,
-                GL_FLOAT,
-                GL_FALSE,
-                6 * vertex_data.dt_size,
-                ctypes.c_void_p(3 * vertex_data.dt_size),
-            )
-            glEnableVertexAttribArray(1)
-
-            # aInstanceTranslateX
-            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
-            glVertexAttribPointer(
-                2,
-                1,
-                GL_FLOAT,
-                GL_FALSE,
-                2 * xz_translate.itemsize,
-                None,
-            )
-            glEnableVertexAttribArray(2)
-            glVertexAttribDivisor(2, 1)
-
-            # aInstanceTranslateZ
-            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
-            glVertexAttribPointer(
-                3,
-                1,
-                GL_FLOAT,
-                GL_FALSE,
-                2 * xz_translate.itemsize,
-                ctypes.c_void_p(1 * xz_translate.itemsize),
-            )
-            glEnableVertexAttribArray(3)
-            glVertexAttribDivisor(3, 1)
-
-            # aInstanceScaleY
-            glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
-            glVertexAttribPointer(
-                4,
-                1,
-                GL_FLOAT,
-                GL_FALSE,
-                self._model_y.itemsize,
-                None,
-            )
-            glEnableVertexAttribArray(4)
-            glVertexAttribDivisor(4, 1)
-
-            with open("shaders/basic_lighting.vs", "r") as file:
-                vertex_shader_source = file.read()
-                vertex_shader = shaders.compileShader(
-                    vertex_shader_source, GL_VERTEX_SHADER
-                )
-            with open("shaders/basic_lighting.fs", "r") as file:
-                fragment_shader_source = file.read()
-                fragment_shader = shaders.compileShader(
-                    fragment_shader_source, GL_FRAGMENT_SHADER
-                )
-            lighting_shader = shaders.compileProgram(
-                vertex_shader, fragment_shader, validate=True
-            )
-
-            light_pos = glm.vec3(1.2, 4.0, 2.0)
+            light_position = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 1.0, 3.0)
             camera_radians = glm.vec2(0.0, 0.0)
@@ -306,49 +150,18 @@ class App:
             light.set_view(view)
             model = glm.mat4(1.0)
             model = glm.translate(
-                model, glm.vec3(light_pos[0], light_pos[1], light_pos[2])
+                model, glm.vec3(light_position[0], light_position[1], light_position[2])
             )
             model = glm.scale(model, glm.vec3(0.2))
             light.set_model(model)
 
-            glUseProgram(lighting_shader)
-            glUniform4f(
-                glGetUniformLocation(lighting_shader, "objectColor"),
-                0.0,
-                0.2,
-                1.0,
-                1.0,
-            )
-            glUniform3f(
-                glGetUniformLocation(lighting_shader, "lightColor"), 1.0, 1.0, 1.0
-            )
-            glUniform1f(
-                glGetUniformLocation(lighting_shader, "cubeWidth"), self._cube_width
-            )
-            glUniform3f(
-                glGetUniformLocation(lighting_shader, "viewPos"),
-                camera_position.x,
-                camera_position.y,
-                camera_position.z,
-            )
-            glUniformMatrix4fv(
-                glGetUniformLocation(lighting_shader, "view"),
-                1,
-                GL_FALSE,
-                glm.value_ptr(view),
-            )
-            glUniformMatrix4fv(
-                glGetUniformLocation(lighting_shader, "projection"),
-                1,
-                GL_FALSE,
-                glm.value_ptr(projection),
-            )
-            glUniform3f(
-                glGetUniformLocation(lighting_shader, "lightPos"),
-                light_pos[0],
-                light_pos[1],
-                light_pos[2],
-            )
+            water.set_water_color(glm.vec4(0.0, 0.2, 1.0, 1.0))
+            water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+
+            water.set_view_position(camera_position)
+            water.set_view(view)
+            water.set_projection(projection)
+            water.set_light_position(light_position)
 
             smoothing = 0.1
             while (
@@ -411,36 +224,16 @@ class App:
                     light.set_view(view)
                 light.draw()
 
-                glUseProgram(lighting_shader)
                 if camera_changed:
-                    glUniform3f(
-                        glGetUniformLocation(lighting_shader, "viewPos"),
-                        camera_position.x,
-                        camera_position.y,
-                        camera_position.z,
-                    )
-                    glUniformMatrix4fv(
-                        glGetUniformLocation(lighting_shader, "view"),
-                        1,
-                        GL_FALSE,
-                        glm.value_ptr(view),
-                    )
+                    water.set_view_position(camera_position)
+                    water.set_view(view)
 
                 if self._update_model.is_set():
                     self._update_model.clear()
-                    glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
-                    glBufferSubData(
-                        GL_ARRAY_BUFFER,
-                        0,
-                        self._model_y.nbytes,
-                        self._model_y,
-                    )
+                    water.set_water_heights(glm.array(self._model_y))
                     self._can_update_model.set()
 
-                glBindVertexArray(model_vao)
-                glDrawElementsInstanced(
-                    GL_TRIANGLES, 36, GL_UNSIGNED_INT, None, self._instances
-                )
+                water.draw()
 
                 glfw.swap_buffers(window)
                 glfw.poll_events()
