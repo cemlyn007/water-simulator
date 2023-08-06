@@ -131,7 +131,7 @@ class Light:
             glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
         )
         self._vao = self._init_vao(self._vbo, self._ebo, vertex_data)
-        self._light_cube_shader = self._init_shader(self._vao)
+        self._shader = self._init_shader(self._vao)
 
     def _init_vbo(self, vertex_data: glm.array) -> GLint:
         vbo = glGenBuffers(1)
@@ -206,9 +206,9 @@ class Light:
 
     def set_view(self, view: glm.mat4) -> None:
         self._view = view
-        glUseProgram(self._light_cube_shader)
+        glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._light_cube_shader, "view"),
+            glGetUniformLocation(self._shader, "view"),
             1,
             GL_FALSE,
             glm.value_ptr(self._view),
@@ -216,38 +216,38 @@ class Light:
 
     def set_projection(self, projection: glm.mat4) -> None:
         self._projection = projection
-        glUseProgram(self._light_cube_shader)
+        glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._light_cube_shader, "projection"),
+            glGetUniformLocation(self._shader, "projection"),
             1,
             GL_FALSE,
             glm.value_ptr(self._projection),
         )
 
     def set_color(self, color: glm.vec3) -> None:
-        glUseProgram(self._light_cube_shader)
+        glUseProgram(self._shader)
         glUniform3fv(
-            glGetUniformLocation(self._light_cube_shader, "objectColor"),
+            glGetUniformLocation(self._shader, "objectColor"),
             1,
             glm.value_ptr(color),
         )
 
     def set_model(self, model: glm.mat4) -> None:
-        glUseProgram(self._light_cube_shader)
+        glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._light_cube_shader, "model"),
+            glGetUniformLocation(self._shader, "model"),
             1,
             GL_FALSE,
             glm.value_ptr(model),
         )
 
     def draw(self) -> None:
-        glUseProgram(self._light_cube_shader)
+        glUseProgram(self._shader)
         glBindVertexArray(self._vao)
         glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, None)
 
     def __del__(self) -> None:
-        glDeleteProgram(self._light_cube_shader)
+        glDeleteProgram(self._shader)
         glDeleteBuffers(1, self._vbo)
         glDeleteBuffers(1, self._vao)
         glDeleteBuffers(1, self._ebo)
