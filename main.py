@@ -162,6 +162,9 @@ class App:
             container.set_color(glm.vec3(0.7, 0.7, 0.7))
             container.set_view(view)
             container.set_model(glm.mat4(1.0))
+            container.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+            container.set_view_position(camera_position)
+            container.set_light_position(light_position)
 
             water.set_water_color(glm.vec4(0.0, 0.2, 1.0, 1.0))
             water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
@@ -227,15 +230,13 @@ class App:
                         glm.vec3(0.0, 0.5, 0.0),
                         glm.vec3(0.0, 1.0, 0.0),
                     )
-
-                if camera_changed:
                     light.set_view(view)
                     container.set_view(view)
-                light.draw()
-
-                if camera_changed:
-                    water.set_view_position(camera_position)
                     water.set_view(view)
+                    container.set_view_position(camera_position)
+                    water.set_view_position(camera_position)
+
+                light.draw()
 
                 if self._update_model.is_set():
                     self._update_model.clear()

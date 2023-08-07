@@ -478,7 +478,6 @@ class Water:
             water_color.w,
         )
 
-    # TODO: Set methods.
     def set_light_color(self, light_color: glm.vec3) -> None:
         self._light_color = light_color
         glUseProgram(self._shader)
@@ -745,6 +744,26 @@ class Container:
             raise exception
         return shader
 
+    def set_light_color(self, light_color: glm.vec3) -> None:
+        self._light_color = light_color
+        glUseProgram(self._shader)
+        glUniform3f(
+            glGetUniformLocation(self._shader, "lightColor"),
+            light_color.x,
+            light_color.y,
+            light_color.z,
+        )
+
+    def set_view_position(self, view_position: glm.vec3) -> None:
+        self._view_position = view_position
+        glUseProgram(self._shader)
+        glUniform3f(
+            glGetUniformLocation(self._shader, "viewPos"),
+            view_position.x,
+            view_position.y,
+            view_position.z,
+        )
+
     def set_view(self, view: glm.mat4) -> None:
         self._view = view
         glUseProgram(self._shader)
@@ -763,6 +782,16 @@ class Container:
             1,
             GL_FALSE,
             glm.value_ptr(self._projection),
+        )
+
+    def set_light_position(self, light_position: glm.vec3) -> None:
+        self._light_position = light_position
+        glUseProgram(self._shader)
+        glUniform3f(
+            glGetUniformLocation(self._shader, "lightPos"),
+            light_position.x,
+            light_position.y,
+            light_position.z,
         )
 
     def set_color(self, color: glm.vec3) -> None:
