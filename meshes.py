@@ -575,7 +575,17 @@ class Water:
 
 class Container:
     def __init__(self, size: float) -> None:
-        vertex_data = glm.array(
+        vertex_data, indices = self._create_mesh(size)
+        self._total_indices = len(indices)
+        self._vbo = self._init_vbo(vertex_data)
+        self._ebo = self._init_ebo(indices)
+        self._vao = self._init_vao(self._vbo, self._ebo)
+        self._shader = self._init_shader(self._vao)
+
+    def _create_mesh(self, size: float) -> tuple[glm.array, glm.array]:
+        cube_vertices, cube_normals, cube_indices = cube_vertices_normals_and_indices()
+        # Plane
+        vertex_data = (
             np.float32(size)
             * np.array(
                 [
@@ -583,27 +593,79 @@ class Container:
                     -1.0,
                     0.0,
                     -1.0,
+                    0.0,
+                    1.0,
+                    0.0,
                     # Bottom right
                     1.0,
                     0.0,
                     -1.0,
+                    0.0,
+                    1.0,
+                    0.0,
                     # Top right
                     1.0,
                     0.0,
                     1.0,
+                    0.0,
+                    1.0,
+                    0.0,
                     # Top left
                     -1,
                     0.0,
                     1.0,
+                    0.0,
+                    1.0,
+                    0.0,
                 ],
                 dtype=np.float32,
-            ),
-            dtype=glm.float32,
+            )
+        ).tolist()
+        indices = [2, 1, 0, 0, 3, 2]
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([2.0 * size, 1.0, 0.5])
+        cube_vertices_shaped += np.array([0.0, 0.5, size])
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([2.0 * size, 1.0, 0.5])
+        cube_vertices_shaped += np.array([0.0, 0.5, -size])
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([0.5, 1.0, 2.0 * size])
+        cube_vertices_shaped += np.array([size, 0.5, 0.0])
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([0.5, 1.0, 2.0 * size])
+        cube_vertices_shaped += np.array([-size, 0.5, 0.0])
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        offset = max(indices) + 1
+        for i in range(4):
+            indices.extend(
+                [i * (max(cube_indices) + 1) + index + offset for index in cube_indices]
+            )
+
+        vertex_data = glm.array(
+            np.array(vertex_data, dtype=np.float32), dtype=glm.float32
         )
-        self._vbo = self._init_vbo(vertex_data)
-        self._ebo = self._init_ebo()
-        self._vao = self._init_vao(self._vbo, self._ebo)
-        self._shader = self._init_shader(self._vao)
+        indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+        return vertex_data, indices
 
     def _init_vbo(self, vertex: glm.array) -> None:
         vbo = glGenBuffers(1)
@@ -617,10 +679,7 @@ class Container:
             raise exception
         return vbo
 
-    def _init_ebo(self) -> None:
-        indices = glm.array(
-            np.array([2, 1, 0, 0, 3, 2], dtype=np.uint32), dtype=glm.uint32
-        )
+    def _init_ebo(self, indices: glm.array) -> None:
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
@@ -641,10 +700,21 @@ class Container:
             glBindVertexArray(vao)
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            # Positions.
             glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 3 * glm.sizeof(glm.float32), None
+                0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None
             )
             glEnableVertexAttribArray(0)
+            # Normals.
+            glVertexAttribPointer(
+                1,
+                3,
+                GL_FLOAT,
+                GL_FALSE,
+                6 * glm.sizeof(glm.float32),
+                ctypes.c_void_p(3 * glm.sizeof(glm.float32)),
+            )
+            glEnableVertexAttribArray(1)
         except Exception as exception:
             glDeleteVertexArrays(1, self._vao)
             raise exception
@@ -715,7 +785,7 @@ class Container:
     def draw(self) -> None:
         glUseProgram(self._shader)
         glBindVertexArray(self._vao)
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None)
+        glDrawElements(GL_TRIANGLES, self._total_indices, GL_UNSIGNED_INT, None)
 
     def __del__(self) -> None:
         glDeleteBuffers(1, self._vbo)
