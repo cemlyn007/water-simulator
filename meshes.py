@@ -622,33 +622,36 @@ class Container:
         ).tolist()
         indices = [2, 1, 0, 0, 3, 2]
 
+        height_scale = 1.25
+        thin_scale = 0.25
+
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([2.0 * size, 1.0, 0.5])
-        cube_vertices_shaped += np.array([0.0, 0.5, size])
+        cube_vertices_shaped *= np.array([2.0 * size, height_scale, thin_scale])
+        cube_vertices_shaped += np.array([0.0, height_scale / 2.0, size - thin_scale])
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
             vertex_data.extend(vertices)
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([2.0 * size, 1.0, 0.5])
-        cube_vertices_shaped += np.array([0.0, 0.5, -size])
+        cube_vertices_shaped *= np.array([2.0 * size, height_scale, thin_scale])
+        cube_vertices_shaped += np.array([0.0, height_scale / 2.0, -size + thin_scale])
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
             vertex_data.extend(vertices)
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([0.5, 1.0, 2.0 * size])
-        cube_vertices_shaped += np.array([size, 0.5, 0.0])
+        cube_vertices_shaped *= np.array([thin_scale, height_scale, 2.0 * size])
+        cube_vertices_shaped += np.array([size - thin_scale, height_scale / 2.0, 0.0])
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
             vertex_data.extend(vertices)
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([0.5, 1.0, 2.0 * size])
-        cube_vertices_shaped += np.array([-size, 0.5, 0.0])
+        cube_vertices_shaped *= np.array([thin_scale, height_scale, 2.0 * size])
+        cube_vertices_shaped += np.array([-size + thin_scale, height_scale / 2.0, 0.0])
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
             vertex_data.extend(vertices)
