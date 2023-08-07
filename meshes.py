@@ -571,3 +571,153 @@ class Water:
         glDeleteBuffers(1, self._water_positions_xz_vbo)
         glDeleteBuffers(1, self._ebo)
         glDeleteBuffers(1, self._cube_vbo)
+
+
+class Container:
+    def __init__(self, size: float) -> None:
+        vertex_data = glm.array(
+            np.float32(size)
+            * np.array(
+                [
+                    # Bottom left
+                    -1.0,
+                    0.0,
+                    -1.0,
+                    # Bottom right
+                    1.0,
+                    0.0,
+                    -1.0,
+                    # Top right
+                    1.0,
+                    0.0,
+                    1.0,
+                    # Top left
+                    -1,
+                    0.0,
+                    1.0,
+                ],
+                dtype=np.float32,
+            ),
+            dtype=glm.float32,
+        )
+        self._vbo = self._init_vbo(vertex_data)
+        self._ebo = self._init_ebo()
+        self._vao = self._init_vao(self._vbo, self._ebo)
+        self._shader = self._init_shader(self._vao)
+
+    def _init_vbo(self, vertex: glm.array) -> None:
+        vbo = glGenBuffers(1)
+        try:
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBufferData(
+                GL_ARRAY_BUFFER, glm.sizeof(vertex), vertex.ptr, GL_STATIC_DRAW
+            )
+        except Exception as exception:
+            glDeleteBuffers(1, self._vbo)
+            raise exception
+        return vbo
+
+    def _init_ebo(self) -> None:
+        indices = glm.array(
+            np.array([2, 1, 0, 0, 3, 2], dtype=np.uint32), dtype=glm.uint32
+        )
+        ebo = glGenBuffers(1)
+        try:
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            glBufferData(
+                GL_ELEMENT_ARRAY_BUFFER,
+                glm.sizeof(indices),
+                indices.ptr,
+                GL_STATIC_DRAW,
+            )
+        except Exception as exception:
+            glDeleteBuffers(1, self._ebo)
+            raise exception
+        return ebo
+
+    def _init_vao(self, vbo: GLint, ebo: GLint) -> None:
+        vao = glGenVertexArrays(1)
+        try:
+            glBindVertexArray(vao)
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+            glVertexAttribPointer(
+                0, 3, GL_FLOAT, GL_FALSE, 3 * glm.sizeof(glm.float32), None
+            )
+            glEnableVertexAttribArray(0)
+        except Exception as exception:
+            glDeleteVertexArrays(1, self._vao)
+            raise exception
+        return vao
+
+    def _init_shader(self, vao: GLint) -> GLint:
+        with open("shaders/container.vs", "r") as file:
+            vertex_shader_source = file.read()
+            vertex_shader = shaders.compileShader(
+                vertex_shader_source, GL_VERTEX_SHADER
+            )
+        try:
+            with open("shaders/container.fs", "r") as file:
+                fragment_shader_source = file.read()
+                fragment_shader = shaders.compileShader(
+                    fragment_shader_source, GL_FRAGMENT_SHADER
+                )
+            try:
+                glBindVertexArray(vao)
+                shader = shaders.compileProgram(
+                    vertex_shader, fragment_shader, validate=True
+                )
+            except Exception as exception:
+                glDeleteShader(fragment_shader)
+                raise exception
+        except Exception as exception:
+            glDeleteShader(vertex_shader)
+            raise exception
+        return shader
+
+    def set_view(self, view: glm.mat4) -> None:
+        self._view = view
+        glUseProgram(self._shader)
+        glUniformMatrix4fv(
+            glGetUniformLocation(self._shader, "view"),
+            1,
+            GL_FALSE,
+            glm.value_ptr(self._view),
+        )
+
+    def set_projection(self, projection: glm.mat4) -> None:
+        self._projection = projection
+        glUseProgram(self._shader)
+        glUniformMatrix4fv(
+            glGetUniformLocation(self._shader, "projection"),
+            1,
+            GL_FALSE,
+            glm.value_ptr(self._projection),
+        )
+
+    def set_color(self, color: glm.vec3) -> None:
+        glUseProgram(self._shader)
+        glUniform3fv(
+            glGetUniformLocation(self._shader, "objectColor"),
+            1,
+            glm.value_ptr(color),
+        )
+
+    def set_model(self, model: glm.mat4) -> None:
+        glUseProgram(self._shader)
+        glUniformMatrix4fv(
+            glGetUniformLocation(self._shader, "model"),
+            1,
+            GL_FALSE,
+            glm.value_ptr(model),
+        )
+
+    def draw(self) -> None:
+        glUseProgram(self._shader)
+        glBindVertexArray(self._vao)
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None)
+
+    def __del__(self) -> None:
+        glDeleteBuffers(1, self._vbo)
+        glDeleteBuffers(1, self._ebo)
+        glDeleteVertexArrays(1, self._vao)

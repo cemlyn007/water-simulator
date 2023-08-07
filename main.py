@@ -132,6 +132,9 @@ class App:
 
             light = meshes.Light()
             water = meshes.Water(self._n, self._m, self._cube_width)
+            container = meshes.Container(
+                (max(self._n, self._m) * self._cube_width * 1.1) / 2.0
+            )
 
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
@@ -154,6 +157,11 @@ class App:
             )
             model = glm.scale(model, glm.vec3(0.2))
             light.set_model(model)
+
+            container.set_projection(projection)
+            container.set_color(glm.vec3(0.7, 0.7, 0.7))
+            container.set_view(view)
+            container.set_model(glm.mat4(1.0))
 
             water.set_water_color(glm.vec4(0.0, 0.2, 1.0, 1.0))
             water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
@@ -222,6 +230,7 @@ class App:
 
                 if camera_changed:
                     light.set_view(view)
+                    container.set_view(view)
                 light.draw()
 
                 if camera_changed:
@@ -234,6 +243,7 @@ class App:
                     self._can_update_model.set()
 
                 water.draw()
+                container.draw()
 
                 glfw.swap_buffers(window)
                 glfw.poll_events()
