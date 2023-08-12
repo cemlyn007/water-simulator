@@ -47,17 +47,36 @@ class Camera:
     def resize(self, width: int, height: int) -> None:
         self._width = width
         self._height = height
+        glBindFramebuffer(GL_FRAMEBUFFER, self._framebuffer)
         glBindTexture(GL_TEXTURE_2D, self.rendered_texture)
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            GL_RGB8,
+            GL_RGB,
             self._width,
             self._height,
             0,
             GL_RGB,
             GL_UNSIGNED_BYTE,
             None,
+        )
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+
+        self._depth_render_buffer = glGenRenderbuffers(1)
+        glBindRenderbuffer(GL_RENDERBUFFER, self._depth_render_buffer)
+        glRenderbufferStorage(
+            GL_RENDERBUFFER, GL_DEPTH_COMPONENT, self._width, self._height
+        )
+        glFramebufferRenderbuffer(
+            GL_FRAMEBUFFER,
+            GL_DEPTH_ATTACHMENT,
+            GL_RENDERBUFFER,
+            self._depth_render_buffer,
+        )
+
+        glFramebufferTexture(
+            GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, self.rendered_texture, 0
         )
 
     def bind(self) -> None:

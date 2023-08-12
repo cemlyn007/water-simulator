@@ -55,13 +55,18 @@ class App:
         self._model_y = np.zeros(self._instances, dtype=np.float32)
         self._model_y_a = np.zeros(self._instances, dtype=np.float32)
         self._model_y_b = np.zeros(self._instances, dtype=np.float32)
+        self._framebuffer_size_changed = False
 
     def framebuffer_size_callback(self, window, width, height):
+        self._framebuffer_size_changed = True
+        if sys.platform == "darwin":
+            self._width = width // 2
+            self._height = height // 2
+        else:
+            self._width = width
+            self._height = height
         self._framebuffer_width_size = width
         self._framebuffer_height_size = height
-        print(self._framebuffer_width_size, self._framebuffer_height_size, flush=True)
-        glViewport(0, 0, width, height)
-        self._background_camera.resize(width, height)
 
     def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
         self.last_cursor_position.x = self.current_cursor_position.x
@@ -280,6 +285,21 @@ class App:
                     self._update_model.clear()
                     water.set_water_heights(glm.array(self._model_y))
                     self._can_update_model.set()
+
+                if self._framebuffer_size_changed:
+                    projection = glm.perspective(
+                        glm.radians(45.0),
+                        self._framebuffer_width_size / self._framebuffer_height_size,
+                        0.1,
+                        100.0,
+                    )
+                    light.set_projection(projection)
+                    container.set_projection(projection)
+                    water.set_projection(projection)
+                    self._background_camera.resize(
+                        self._framebuffer_width_size, self._framebuffer_height_size
+                    )
+                    self._framebuffer_size_changed = False
 
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
