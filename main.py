@@ -40,10 +40,13 @@ def get_y_scale_inplace(
 
 
 class App:
-    def __init__(self, n: int, m: int, cube_width: float) -> None:
+    def __init__(
+        self, n: int, m: int, cube_width: float, wall_thickness: float
+    ) -> None:
         self._n = n
         self._m = m
         self._cube_width = cube_width
+        self._wall_thickness = wall_thickness
         self._instances = n * m
         self.current_cursor_position = glm.vec2(0.0, 0.0)
         self.last_cursor_position = glm.vec2(0.0, 0.0)

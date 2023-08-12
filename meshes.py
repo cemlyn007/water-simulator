@@ -121,6 +121,27 @@ def cube_vertices_normals_and_indices():
     return vertices, normals, indices
 
 
+def plane_vertices_normals_and_indices():
+    vertices = [
+        (-0.5, 0.5, 0.5),
+        (0.5, 0.5, 0.5),
+        (-0.5, 0.5, -0.5),
+        (0.5, 0.5, -0.5),
+    ]
+    assert len(vertices) == len(set(vertices))
+
+    normals = [
+        (0, 1, 0),
+        (0, 1, 0),
+        (0, 1, 0),
+        (0, 1, 0),
+    ]
+
+    indices = [0, 1, 3, 2, 0, 3]
+
+    return vertices, normals, indices
+
+
 class Light:
     def __init__(self) -> None:
         vertices, _, indices = cube_vertices_normals_and_indices()
@@ -132,6 +153,8 @@ class Light:
         )
         self._vao = self._init_vao(self._vbo, self._ebo, vertex_data)
         self._shader = self._init_shader(self._vao)
+        glUseProgram(0)
+        glBindVertexArray(0)
 
     def _init_vbo(self, vertex_data: glm.array) -> GLint:
         vbo = glGenBuffers(1)
@@ -258,7 +281,7 @@ class Water:
         self._n = n
         self._m = m
         self._cube_width = cube_width
-        vertices, normals, indices = cube_vertices_normals_and_indices()
+        vertices, normals, indices = plane_vertices_normals_and_indices()
         vertex_data = []
         for vertex, normal in zip(vertices, normals):
             vertex_data.extend(vertex)
@@ -266,9 +289,8 @@ class Water:
         vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
 
         self._cube_vbo = self._init_vbo(vertex_data)
-        self._ebo = self._init_ebo(
-            glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
-        )
+        self._indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+        self._ebo = self._init_ebo(self._indices)
 
         self._model_scale_xz_vbo = self._init_model_scale_xz_vbo()
         self._water_positions_xz_vbo = self._init_model_translate_xz_vbo()
@@ -285,6 +307,8 @@ class Water:
         self._shader = self._init_shader(self._vao)
         glUseProgram(self._shader)
         glUniform1f(glGetUniformLocation(self._shader, "cubeWidth"), self._cube_width)
+        glUseProgram(0)
+        glBindVertexArray(0)
 
     def _init_vbo(self, vertex_data: glm.array) -> GLint:
         vbo = glGenBuffers(1)
@@ -578,6 +602,8 @@ class Container:
         self._ebo = self._init_ebo(indices)
         self._vao = self._init_vao(self._vbo, self._ebo)
         self._shader = self._init_shader(self._vao)
+        glUseProgram(0)
+        glBindVertexArray(0)
 
     def _create_mesh(
         self, size: float, wall_thickness: float
