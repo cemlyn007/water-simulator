@@ -467,17 +467,6 @@ class Water:
             raise exception
         return light_cube_shader
 
-    def set_water_color(self, water_color: glm.vec4) -> None:
-        self._water_color = water_color
-        glUseProgram(self._shader)
-        glUniform4f(
-            glGetUniformLocation(self._shader, "objectColor"),
-            water_color.x,
-            water_color.y,
-            water_color.z,
-            water_color.w,
-        )
-
     def set_light_color(self, light_color: glm.vec3) -> None:
         self._light_color = light_color
         glUseProgram(self._shader)
@@ -487,6 +476,12 @@ class Water:
             light_color.y,
             light_color.z,
         )
+
+    def set_texture(self, texture: int) -> None:
+        glUseProgram(self._shader)
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, texture)
+        glUniform1i(glGetUniformLocation(self._shader, "background"), 0)
 
     def set_view_position(self, view_position: glm.vec3) -> None:
         self._view_position = view_position
