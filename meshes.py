@@ -351,6 +351,7 @@ class Water:
         return vbo
 
     def _init_ebo(self, indices: glm.array) -> GLint:
+        self._len_ebo = len(indices)
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
@@ -536,7 +537,9 @@ class Water:
     def draw(self) -> None:
         glUseProgram(self._shader)
         glBindVertexArray(self._vao)
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, self._n * self._m)
+        glDrawElementsInstanced(
+            GL_TRIANGLES, self._len_ebo, GL_UNSIGNED_INT, None, self._n * self._m
+        )
 
     def _get_xz_translate(
         self, n: int, m: int, cube_width: float
