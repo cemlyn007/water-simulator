@@ -171,7 +171,7 @@ class App:
 
             water = meshes.Water(self._n, self._m, self._cube_width)
             container = meshes.Container(
-                (max(self._n, self._m) * self._cube_width * 1.1) / 2.0
+                (max(self._n, self._m) * self._cube_width) / 2.0, self._cube_width * 2
             )
 
             light_position = glm.vec3(1.2, 4.0, 2.0)

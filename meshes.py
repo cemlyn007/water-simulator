@@ -568,19 +568,21 @@ class Water:
 
 
 class Container:
-    def __init__(self, size: float) -> None:
-        vertex_data, indices = self._create_mesh(size)
+    def __init__(self, size: float, wall_thickness: float) -> None:
+        vertex_data, indices = self._create_mesh(size, wall_thickness)
         self._total_indices = len(indices)
         self._vbo = self._init_vbo(vertex_data)
         self._ebo = self._init_ebo(indices)
         self._vao = self._init_vao(self._vbo, self._ebo)
         self._shader = self._init_shader(self._vao)
 
-    def _create_mesh(self, size: float) -> tuple[glm.array, glm.array]:
+    def _create_mesh(
+        self, size: float, wall_thickness: float
+    ) -> tuple[glm.array, glm.array]:
         cube_vertices, cube_normals, cube_indices = cube_vertices_normals_and_indices()
         # Plane
         vertex_data = (
-            np.float32(size)
+            np.float32(size + wall_thickness)
             * np.array(
                 [
                     # Bottom left
@@ -618,12 +620,13 @@ class Container:
         indices = [2, 1, 0, 0, 3, 2]
 
         height_scale = 1.25
-        thin_scale = 0.25
+
+        wall_length = 2.0 * (size + wall_thickness)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([2.0 * size, height_scale, thin_scale])
+        cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
         cube_vertices_shaped += np.array(
-            [0.0, height_scale / 2.0, size - thin_scale / 2.0]
+            [0.0, height_scale / 2.0, size + wall_thickness / 2.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -631,9 +634,9 @@ class Container:
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([2.0 * size, height_scale, thin_scale])
+        cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
         cube_vertices_shaped += np.array(
-            [0.0, height_scale / 2.0, -size + thin_scale / 2.0]
+            [0.0, height_scale / 2.0, -size - wall_thickness / 2.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -641,9 +644,9 @@ class Container:
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([thin_scale, height_scale, 2.0 * size])
+        cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
         cube_vertices_shaped += np.array(
-            [size - thin_scale / 2.0, height_scale / 2.0, 0.0]
+            [size + wall_thickness / 2.0, height_scale / 2.0, 0.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -651,9 +654,9 @@ class Container:
             vertex_data.extend(normals)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
-        cube_vertices_shaped *= np.array([thin_scale, height_scale, 2.0 * size])
+        cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
         cube_vertices_shaped += np.array(
-            [-size + thin_scale / 2.0, height_scale / 2.0, 0.0]
+            [-size - wall_thickness / 2.0, height_scale / 2.0, 0.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
