@@ -121,27 +121,6 @@ def cube_vertices_normals_and_indices():
     return vertices, normals, indices
 
 
-def plane_vertices_normals_and_indices():
-    vertices = [
-        (-0.5, 0.5, 0.5),
-        (0.5, 0.5, 0.5),
-        (-0.5, 0.5, -0.5),
-        (0.5, 0.5, -0.5),
-    ]
-    assert len(vertices) == len(set(vertices))
-
-    normals = [
-        (0, 1, 0),
-        (0, 1, 0),
-        (0, 1, 0),
-        (0, 1, 0),
-    ]
-
-    indices = [0, 1, 3, 2, 0, 3]
-
-    return vertices, normals, indices
-
-
 def grid_vertices_normals_and_indices(n: int, m: int, cell_size: float):
     vertices = []
     for i in range(n):
