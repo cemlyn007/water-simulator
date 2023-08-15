@@ -142,6 +142,43 @@ def plane_vertices_normals_and_indices():
     return vertices, normals, indices
 
 
+def grid_vertices_normals_and_indices(n: int, m: int, cell_size: float):
+    vertices = []
+    for i in range(n):
+        for j in range(m):
+            vertices.append(
+                (
+                    i * cell_size,
+                    j * cell_size,
+                )
+            )
+
+    triangle_vertices = np.array(vertices, dtype=np.float32)
+    triangle_vertices = triangle_vertices.reshape((n, m, 2))
+
+    triangle_indices = [
+        index
+        for i in range(n - 1)
+        for j in range(m - 1)
+        for index in [
+            i * m + j,
+            i * m + j + 1,
+            (i + 1) * m + j + 1,
+            (i + 1) * m + j + 1,
+            (i + 1) * m + j,
+            i * m + j,
+        ]
+    ]
+
+    triangle_vertices = triangle_vertices.reshape((-1, 2))
+    triangle_vertices -= np.array(
+        [n * cell_size / 2.0, m * cell_size / 2.0], dtype=np.float32
+    )
+    triangle_indices = np.array(triangle_indices, dtype=np.uint32)
+    triangle_normals = np.array([[0, 1, 0]] * len(triangle_vertices), dtype=np.float32)
+    return triangle_vertices, triangle_normals, triangle_indices
+
+
 class Light:
     def __init__(self) -> None:
         vertices, _, indices = cube_vertices_normals_and_indices()
@@ -277,37 +314,31 @@ class Light:
 
 
 class Water:
-    def __init__(self, n: int, m: int, cube_width: float) -> None:
+    def __init__(self, n: int, m: int, cell_width: float) -> None:
         self._n = n
         self._m = m
-        self._cube_width = cube_width
-        vertices, normals, indices = plane_vertices_normals_and_indices()
+        self._cell_width = cell_width
+        vertices, normals, indices = grid_vertices_normals_and_indices(n, m, cell_width)
+        self._n_vertices = len(vertices)
         vertex_data = []
         for vertex, normal in zip(vertices, normals):
             vertex_data.extend(vertex)
             vertex_data.extend(normal)
         vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
 
-        self._cube_vbo = self._init_vbo(vertex_data)
-        self._indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+        self._vbo = self._init_vbo(vertex_data)
+        self._indices = glm.array(indices, dtype=glm.uint32)
         self._ebo = self._init_ebo(self._indices)
 
-        self._model_scale_xz_vbo = self._init_model_scale_xz_vbo()
-        self._water_positions_xz_vbo = self._init_model_translate_xz_vbo()
-        self._water_height_vbo = self._init_model_y_vbo()
+        self._height_vbo = self._init_model_y_vbo()
 
         self._vao = self._init_vao(
-            self._cube_vbo,
-            self._water_positions_xz_vbo,
-            self._water_height_vbo,
+            self._vbo,
+            self._height_vbo,
             self._ebo,
-            vertex_data,
         )
 
         self._shader = self._init_shader(self._vao)
-        glUseProgram(self._shader)
-        glUniform1f(glGetUniformLocation(self._shader, "cubeWidth"), self._cube_width)
-        glUseProgram(0)
         glBindVertexArray(0)
 
     def _init_vbo(self, vertex_data: glm.array) -> GLint:
@@ -325,47 +356,13 @@ class Water:
             raise exception
         return vbo
 
-    def _init_model_scale_xz_vbo(self) -> GLint:
-        vbo = glGenBuffers(1)
-        try:
-            xz_scale = np.array(self._cube_width, dtype=np.float32)
-            xz_scale = np.tile(xz_scale, self._n * self._m)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                xz_scale.nbytes,
-                xz_scale,
-                GL_STATIC_DRAW,
-            )
-        except Exception as exception:
-            glDeleteBuffers(1, vbo)
-            raise exception
-        return vbo
-
-    def _init_model_translate_xz_vbo(self) -> GLint:
-        vbo = glGenBuffers(1)
-        try:
-            xz_translate = self._get_xz_translate(self._n, self._m, self._cube_width)
-            glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER,
-                xz_translate.nbytes,
-                xz_translate,
-                GL_STATIC_DRAW,
-            )
-        except Exception as exception:
-            glDeleteBuffers(1, vbo)
-            raise exception
-        return vbo
-
     def _init_model_y_vbo(self) -> GLint:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            # First half will be y translations, second half will be y scales.
             glBufferData(
                 GL_ARRAY_BUFFER,
-                self._n * self._m * glm.sizeof(glm.float32),
+                self._n_vertices * glm.sizeof(glm.float32),
                 None,
                 GL_DYNAMIC_DRAW,
             )
@@ -392,76 +389,49 @@ class Water:
 
     def _init_vao(
         self,
-        cube_vbo: GLint,
-        model_translate_xz_vbo: GLint,
-        model_y_vbo: GLint,
+        vbo: GLint,
+        height_vbo: GLint,
         ebo: GLint,
-        vertex_data: glm.array,
     ) -> GLint:
         vao = glGenVertexArrays(1)
         try:
             glBindVertexArray(vao)
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
 
-            glBindBuffer(GL_ARRAY_BUFFER, cube_vbo)
+            # Contains X and Z coordinates.
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glVertexAttribPointer(
                 0,
-                3,
+                2,
                 GL_FLOAT,
                 GL_FALSE,
-                6 * vertex_data.dt_size,
+                5 * np.float32(0.0).itemsize,
                 ctypes.c_void_p(0),
             )
             glEnableVertexAttribArray(0)
 
+            # Contains normals.
             glVertexAttribPointer(
                 1,
                 3,
                 GL_FLOAT,
                 GL_FALSE,
-                6 * vertex_data.dt_size,
-                ctypes.c_void_p(3 * vertex_data.dt_size),
+                5 * np.float32(0.0).itemsize,
+                ctypes.c_void_p(2 * np.float32(0.0).itemsize),
             )
             glEnableVertexAttribArray(1)
 
-            # aInstanceTranslateX
-            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
+            # Contains Y coordinates.
+            glBindBuffer(GL_ARRAY_BUFFER, height_vbo)
             glVertexAttribPointer(
                 2,
-                1,
-                GL_FLOAT,
-                GL_FALSE,
-                2 * np.float32(0.0).itemsize,
-                None,
-            )
-            glEnableVertexAttribArray(2)
-            glVertexAttribDivisor(2, 1)
-
-            # aInstanceTranslateZ
-            glBindBuffer(GL_ARRAY_BUFFER, model_translate_xz_vbo)
-            glVertexAttribPointer(
-                3,
-                1,
-                GL_FLOAT,
-                GL_FALSE,
-                2 * np.float32(0.0).itemsize,
-                ctypes.c_void_p(1 * np.float32(0.0).itemsize),
-            )
-            glEnableVertexAttribArray(3)
-            glVertexAttribDivisor(3, 1)
-
-            # aInstanceScaleY
-            glBindBuffer(GL_ARRAY_BUFFER, model_y_vbo)
-            glVertexAttribPointer(
-                4,
                 1,
                 GL_FLOAT,
                 GL_FALSE,
                 np.float32(0.0).itemsize,
                 None,
             )
-            glEnableVertexAttribArray(4)
-            glVertexAttribDivisor(4, 1)
+            glEnableVertexAttribArray(2)
         except Exception as exception:
             glDeleteVertexArrays(1, vao)
             raise exception
@@ -550,7 +520,12 @@ class Water:
 
     def set_water_heights(self, water_heights: glm.array) -> None:
         self._water_heights = water_heights
-        glBindBuffer(GL_ARRAY_BUFFER, self._water_height_vbo)
+        if len(water_heights) != self._n_vertices:
+            raise ValueError(
+                f"Water heights array must have {self._n_vertices} elements."
+            )
+        # else...
+        glBindBuffer(GL_ARRAY_BUFFER, self._height_vbo)
         glBufferSubData(
             GL_ARRAY_BUFFER,
             0,
@@ -561,37 +536,14 @@ class Water:
     def draw(self) -> None:
         glUseProgram(self._shader)
         glBindVertexArray(self._vao)
-        glDrawElementsInstanced(
-            GL_TRIANGLES, self._len_ebo, GL_UNSIGNED_INT, None, self._n * self._m
-        )
-
-    def _get_xz_translate(
-        self, n: int, m: int, cube_width: float
-    ) -> np.ndarray[any, np.float32]:
-        full_width = 1.0 * cube_width
-        half_width = 0.5 * cube_width
-        translate = []
-        index = 0
-        for i in range(n):
-            for j in range(m):
-                translate.extend(
-                    [
-                        # X coordinate.
-                        full_width * i - ((full_width * n) / 2.0) + half_width,
-                        # Z coordinate.
-                        full_width * j - ((full_width * m) / 2.0) + half_width,
-                    ]
-                )
-                index += 1
-        return np.array(translate, dtype=np.float32)
+        glDrawElements(GL_TRIANGLES, self._len_ebo, GL_UNSIGNED_INT, None)
 
     def __del__(self) -> None:
         glDeleteProgram(self._shader)
         glDeleteVertexArrays(1, self._vao)
-        glDeleteBuffers(1, self._water_height_vbo)
-        glDeleteBuffers(1, self._water_positions_xz_vbo)
+        glDeleteBuffers(1, self._height_vbo)
+        glDeleteBuffers(1, self._vbo)
         glDeleteBuffers(1, self._ebo)
-        glDeleteBuffers(1, self._cube_vbo)
 
 
 class Container:
