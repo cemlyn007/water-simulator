@@ -135,23 +135,23 @@ def grid_vertices_normals_and_indices(n: int, m: int, cell_size: float):
     triangle_vertices = np.array(vertices, dtype=np.float32)
     triangle_vertices = triangle_vertices.reshape((n, m, 2))
 
-    triangle_indices = [
-        index
-        for i in range(n - 1)
-        for j in range(m - 1)
-        for index in [
-            i * m + j,
-            i * m + j + 1,
-            (i + 1) * m + j + 1,
-            (i + 1) * m + j + 1,
-            (i + 1) * m + j,
-            i * m + j,
-        ]
-    ]
+    triangle_indices = []
+    for i in range(n - 1):
+        for j in range(m - 1):
+            triangle_indices.extend(
+                [
+                    i * m + j,
+                    i * m + j + 1,
+                    (i + 1) * m + j + 1,
+                    (i + 1) * m + j + 1,
+                    (i + 1) * m + j,
+                    i * m + j,
+                ]
+            )
 
     triangle_vertices = triangle_vertices.reshape((-1, 2))
     triangle_vertices -= np.array(
-        [n * cell_size / 2.0, m * cell_size / 2.0], dtype=np.float32
+        [(n - 1) * cell_size / 2.0, (m - 1) * cell_size / 2.0], dtype=np.float32
     )
     triangle_indices = np.array(triangle_indices, dtype=np.uint32)
     triangle_normals = np.array([[0, 1, 0]] * len(triangle_vertices), dtype=np.float32)
