@@ -176,13 +176,12 @@ class App:
             self._background_camera.unbind()
 
             light = meshes.Light()
-
             water = meshes.Water(self._n, self._m, self._cube_width)
             container = meshes.Container(
                 ((max(self._n, self._m) - 1) * self._cube_width) / 2.0,
                 self._cube_width * 2,
             )
-
+            ball = meshes.Ball()
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 3.0, 3.0)
@@ -217,6 +216,14 @@ class App:
             container.set_light_color(glm.vec3(1.0, 1.0, 1.0))
             container.set_view_position(camera_position)
             container.set_light_position(light_position)
+
+            ball.set_projection(projection)
+            ball.set_color(glm.vec3(0.7, 0.1, 0.1))
+            ball.set_view(view)
+            ball.set_model(glm.mat4(1.0))
+            ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+            ball.set_view_position(camera_position)
+            ball.set_light_position(light_position)
 
             water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
             water.set_texture(self._background_camera.rendered_texture)
@@ -280,8 +287,10 @@ class App:
                         glm.vec3(0.0, 1.0, 0.0),
                     )
                     light.set_view(view)
+                    ball.set_view(view)
                     container.set_view(view)
                     water.set_view(view)
+                    ball.set_view_position(camera_position)
                     container.set_view_position(camera_position)
                     water.set_view_position(camera_position)
 
@@ -298,6 +307,7 @@ class App:
                         100.0,
                     )
                     light.set_projection(projection)
+                    ball.set_projection(projection)
                     container.set_projection(projection)
                     water.set_projection(projection)
                     self._background_camera.resize(
@@ -305,10 +315,17 @@ class App:
                     )
                     self._framebuffer_size_changed = False
 
+                ball.set_model(
+                    glm.translate(
+                        glm.vec3(0.0, 2 * np.sin(5 * glfw.get_time()) + 2.5, 0.0)
+                    )
+                )
+
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
                 container.draw()
+                ball.draw()
                 self._background_camera.unbind()
 
                 glClearColor(0.1, 0.1, 0.1, 1.0)
@@ -316,6 +333,7 @@ class App:
 
                 light.draw()
                 container.draw()
+                ball.draw()
                 water.draw()
 
                 glfw.swap_buffers(window)
