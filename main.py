@@ -193,9 +193,9 @@ class App:
                 glm.vec3(0.0, 1.0, 0.0),
             )
             projection = glm.perspective(
-                glm.radians(45.0),
+                glm.radians(60.0),
                 self._framebuffer_width_size / self._framebuffer_height_size,
-                0.1,
+                0.01,
                 100.0,
             )
 
@@ -301,9 +301,9 @@ class App:
 
                 if self._framebuffer_size_changed:
                     projection = glm.perspective(
-                        glm.radians(45.0),
+                        glm.radians(60.0),
                         self._framebuffer_width_size / self._framebuffer_height_size,
-                        0.1,
+                        0.01,
                         100.0,
                     )
                     light.set_projection(projection)
