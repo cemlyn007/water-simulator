@@ -8,6 +8,9 @@ import math
 import time
 import meshes
 import textures
+import simulation
+import collisions
+import jax.numpy as jnp
 
 
 def update_orbit_camera_position(
@@ -17,26 +20,6 @@ def update_orbit_camera_position(
     y = radius * np.sin(elevation_radians)
     z = radius * np.sin(azimuth_radians) * np.cos(elevation_radians)
     return np.array([x, y, z], dtype=np.float32)
-
-
-def get_y_scale_inplace(
-    arr: np.ndarray[any, np.float32],
-    i: np.ndarray[any, np.float32],
-    j: np.ndarray[any, np.float32],
-    t: float,
-    cache: dict[str, np.ndarray[any, np.float32]],
-) -> None:
-    if not cache:
-        cache["_ij"] = np.multiply(2 * np.pi * 0.0001, i) + np.multiply(
-            2 * np.pi * 0.001, j
-        )
-        cache["_tmp"] = np.empty_like(i)
-
-    np.multiply(-2 * np.pi * 0.1, t, out=cache["_tmp"])
-    np.add(cache["_ij"], cache["_tmp"], out=arr)
-    np.sin(arr, out=arr)
-    np.multiply(0.25, arr, out=arr)
-    np.add(arr, 1.0, out=arr)
 
 
 class App:
@@ -59,6 +42,42 @@ class App:
         self._model_y_a = np.zeros(self._instances, dtype=np.float32)
         self._model_y_b = np.zeros(self._instances, dtype=np.float32)
         self._framebuffer_size_changed = False
+
+        self._rectanguloids = []
+        self._init_rectanguloids()
+
+        self._sphere = collisions.Sphere(
+            jnp.array([0.0, 0.15, 0.0], dtype=jnp.float32), 5 * cube_width
+        )
+        self._simulator = simulation.Simulator(self._sphere, self._rectanguloids)
+
+    def _init_rectanguloids(self) -> None:
+        x_tick_diff = self._cube_width
+        z_tick_diff = self._cube_width
+
+        x_ticks = np.arange(0.0, self._n, dtype=np.float32) * self._cube_width
+        z_ticks = np.arange(0.0, self._m, dtype=np.float32) * self._cube_width
+
+        translate = np.array(
+            [(self._n * self._cube_width) / 2, 0.0, (self._m * self._cube_width) / 2],
+            dtype=np.float32,
+        )
+        for x_tick in x_ticks:
+            for z_tick in z_ticks:
+                corner0 = np.array([x_tick, 0.0, z_tick], dtype=np.float32) - translate
+                corner1 = (
+                    np.array(
+                        [x_tick + x_tick_diff, self._cube_width, z_tick + z_tick_diff],
+                        dtype=np.float32,
+                    )
+                    - translate
+                )
+                self._rectanguloids.append(
+                    collisions.Rectanguloid(
+                        jnp.array(corner0, dtype=jnp.float32),
+                        jnp.array(corner1, dtype=jnp.float32),
+                    )
+                )
 
     def framebuffer_size_callback(self, window, width, height):
         self._framebuffer_size_changed = True
@@ -88,20 +107,17 @@ class App:
 
     def simulation_thread(self) -> None:
         self._can_update_model.set()
-
-        i = np.arange(self._n, dtype=np.float32)
-        j = np.arange(self._m, dtype=np.float32)
-
-        i, j = np.meshgrid(i, j, indexing="ij")
-        i = i.flatten()
-        j = j.flatten()
-
         y_scale = self._model_y_a
 
-        cache = {}
+        sphere_center = self._sphere.center
         while True:
+            # Note: `time.time()` does not seem to be correctly passed to JAX jitted function.
+            # https://github.com/google/jax/issues/17319
             t = time.monotonic()
-            get_y_scale_inplace(y_scale, i, j, t, cache)
+            sphere_center, y_scale[:] = self._simulator.update(
+                t, sphere_center, y_scale
+            )
+            self._sphere = self._sphere._replace(center=sphere_center)
             self._can_update_model.wait()
             self._can_update_model.clear()
             if self._terminate.is_set():
@@ -220,7 +236,9 @@ class App:
             ball.set_projection(projection)
             ball.set_color(glm.vec3(0.7, 0.1, 0.1))
             ball.set_view(view)
-            ball.set_model(glm.mat4(1.0))
+            sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*self._sphere.center))
+            sphere_model = glm.scale(sphere_model, glm.vec3(self._sphere.radius))
+            ball.set_model(sphere_model)
             ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
             ball.set_view_position(camera_position)
             ball.set_light_position(light_position)
@@ -296,6 +314,13 @@ class App:
 
                 if self._update_model.is_set():
                     self._update_model.clear()
+                    sphere_model = glm.translate(
+                        glm.mat4(1.0), glm.vec3(*self._sphere.center)
+                    )
+                    sphere_model = glm.scale(
+                        sphere_model, glm.vec3(self._sphere.radius)
+                    )
+                    ball.set_model(sphere_model)
                     water.set_water_heights(glm.array(self._model_y))
                     self._can_update_model.set()
 
@@ -315,12 +340,6 @@ class App:
                     )
                     self._framebuffer_size_changed = False
 
-                ball.set_model(
-                    glm.translate(
-                        glm.vec3(0.0, 2 * np.sin(5 * glfw.get_time()) + 2.5, 0.0)
-                    )
-                )
-
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -328,6 +347,9 @@ class App:
                 ball.draw()
                 self._background_camera.unbind()
 
+                glViewport(
+                    0, 0, self._framebuffer_width_size, self._framebuffer_height_size
+                )
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
@@ -349,9 +371,12 @@ class App:
 
 
 if __name__ == "__main__":
-    n = 1000
+    # n = 7500
+    # n = 10000
+    n = 50
     print(f"Using {n*n} instances", flush=True)
-    app = App(n, n, 0.0025)
+    app = App(n, n, 0.05, 0.5)
+    # app = App(n, n, 0.0025, 0.5)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
     app.render_until()
