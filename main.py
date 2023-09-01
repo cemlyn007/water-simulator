@@ -47,9 +47,11 @@ class App:
         self._init_rectanguloids()
 
         self._sphere = collisions.Sphere(
-            jnp.array([0.0, 0.15, 0.0], dtype=jnp.float32), 5 * cube_width
+            jnp.array([0.0, 1.0, 0.0], dtype=jnp.float32), 0.3
         )
-        self._simulator = simulation.Simulator(self._sphere, self._rectanguloids)
+        self._simulator = simulation.Simulator(
+            self._sphere, self._rectanguloids, self._n, self._m, cube_width
+        )
 
     def _init_rectanguloids(self) -> None:
         x_tick_diff = self._cube_width
@@ -67,7 +69,7 @@ class App:
                 corner0 = np.array([x_tick, 0.0, z_tick], dtype=np.float32) - translate
                 corner1 = (
                     np.array(
-                        [x_tick + x_tick_diff, self._cube_width, z_tick + z_tick_diff],
+                        [x_tick + x_tick_diff, 0.8, z_tick + z_tick_diff],
                         dtype=np.float32,
                     )
                     - translate
@@ -111,12 +113,8 @@ class App:
 
         sphere_center = self._sphere.center
         while True:
-            # Note: `time.time()` does not seem to be correctly passed to JAX jitted function.
-            # https://github.com/google/jax/issues/17319
-            t = time.monotonic()
-            sphere_center, y_scale[:] = self._simulator.update(
-                t, sphere_center, y_scale
-            )
+            start = time.monotonic()
+            sphere_center, y_scale[:] = self._simulator.simulate()
             self._sphere = self._sphere._replace(center=sphere_center)
             self._can_update_model.wait()
             self._can_update_model.clear()
@@ -128,6 +126,8 @@ class App:
             self._update_model.set()
 
             y_scale = self._model_y_b if y_scale is self._model_y_a else self._model_y_a
+            end = time.monotonic()
+            time.sleep(max(self._simulator.TIME_DELTA.item() - (end - start), 0.0))
 
     def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
@@ -371,12 +371,9 @@ class App:
 
 
 if __name__ == "__main__":
-    # n = 7500
-    # n = 10000
-    n = 50
+    n = 100
     print(f"Using {n*n} instances", flush=True)
-    app = App(n, n, 0.05, 0.5)
-    # app = App(n, n, 0.0025, 0.5)
+    app = App(n, n, 0.02, 0.5)
     simulation_thread = threading.Thread(target=app.simulation_thread)
     simulation_thread.start()
     app.render_until()
