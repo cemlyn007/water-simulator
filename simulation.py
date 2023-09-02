@@ -67,11 +67,11 @@ class Simulator:
 
         collision_mask = r2 < jnp.square(self._sphere.radius)
         body_half_heights = jnp.sqrt(jnp.square(self._sphere.radius) - r2)
-        min_body_heights = jnp.maximum(sphere.center[1] - body_half_heights, 0.0)
-        max_body_heights = jnp.minimum(
+        min_body = jnp.maximum(sphere.center[1] - body_half_heights, 0.0)
+        max_body = jnp.minimum(
             sphere.center[1] + body_half_heights, state.water_heights
         )
-        body_heights = jnp.maximum(max_body_heights - min_body_heights, 0.0)
+        body_heights = jnp.maximum(max_body - min_body, 0.0)
         body_heights = jnp.where(collision_mask, body_heights, 0.0)
 
         forces = -body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
