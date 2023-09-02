@@ -202,7 +202,7 @@ class App:
                 ((max(self._n, self._m) - 1) * self._cube_width) / 2.0,
                 self._cube_width * 2,
             )
-            ball = meshes.Ball()
+            ball = meshes.Ball(self._sphere.radius.item())
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 3.0, 3.0)
@@ -242,7 +242,6 @@ class App:
             ball.set_color(glm.vec3(0.7, 0.1, 0.1))
             ball.set_view(view)
             sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*self._sphere.center))
-            sphere_model = glm.scale(sphere_model, glm.vec3(self._sphere.radius))
             ball.set_model(sphere_model)
             ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
             ball.set_view_position(camera_position)
@@ -321,9 +320,6 @@ class App:
                     self._update_model.clear()
                     sphere_model = glm.translate(
                         glm.mat4(1.0), glm.vec3(*self._sphere.center)
-                    )
-                    sphere_model = glm.scale(
-                        sphere_model, glm.vec3(self._sphere.radius)
                     )
                     ball.set_model(sphere_model)
                     water.set_water_heights(glm.array(self._model_y))

@@ -6,8 +6,8 @@ import glm
 
 
 class Ball:
-    def __init__(self) -> None:
-        vertices, indices, normals = self._create_mesh()
+    def __init__(self, radius: float) -> None:
+        vertices, indices, normals = self._create_mesh(radius)
         vertex_data = []
         for vertex, normal in zip(vertices, normals):
             vertex_data.extend(vertex)
@@ -21,10 +21,9 @@ class Ball:
         glUseProgram(0)
         glBindVertexArray(0)
 
-    def _create_mesh(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def _create_mesh(self, radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         sectors = 36
         stacks = 18
-        radius = 0.5
 
         # Generate sphere mesh data
         vertices = []
