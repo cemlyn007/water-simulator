@@ -38,7 +38,7 @@ class Simulator:
         self._state = State(
             time=jnp.float32(0.0),
             sphere_center=self._sphere.center,
-            water_heights=jnp.ones_like(self._stacked_rectanguloid.corner1[:, 1]),
+            water_heights=self._stacked_rectanguloid.corner1[:, 1],
             sphere_velocity=jnp.zeros_like(self._sphere.center),
             water_velocities=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
             wave_speed=jnp.float32(2.0),
