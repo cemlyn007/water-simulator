@@ -101,18 +101,9 @@ class Simulator:
                 ),
                 mode="valid",
             ) / (
-                2.0
-                * (
-                    jnp.pad(
-                        jnp.ones(
-                            [size - 2 for size in body_heights.shape],
-                            dtype=body_heights.dtype,
-                        ),
-                        1,
-                        mode="constant",
-                    )
-                    + jnp.ones_like(body_heights)
-                )
+                2 * jnp.ones_like(body_heights)
+                + jnp.ones_like(body_heights).at[0, :].set(0.0).at[-1, :].set(0.0)
+                + jnp.ones_like(body_heights).at[:, 0].set(0.0).at[:, -1].set(0.0)
             )
 
         previous_body_heights = jnp.reshape(state.body_heights, (self._n, self._m))
