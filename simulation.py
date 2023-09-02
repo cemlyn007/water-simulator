@@ -6,20 +6,20 @@ import typing
 
 
 class State(typing.NamedTuple):
-    time: jnp.float32
+    time: float
     sphere_center: jnp.ndarray
     water_heights: jnp.ndarray
     sphere_velocity: jnp.ndarray
     water_velocities: jnp.ndarray
-    wave_speed: jnp.float32
+    wave_speed: float
     body_heights: jnp.ndarray
 
 
 class Simulator:
-    GRAVITY_CONSTANT = -10.0
-    TIME_DELTA = jnp.float32(1.0 / 30.0)
-    POSITIONAL_DAMPING = jnp.float32(1.0)
-    VELOCITY_DAMPING = jnp.float32(0.3)
+    GRAVITY_CONSTANT = -9.81
+    TIME_DELTA = 1.0 / 30.0
+    POSITIONAL_DAMPING = 1.0
+    VELOCITY_DAMPING = 0.3
     ALPHA = 0.5
 
     def __init__(
@@ -36,12 +36,12 @@ class Simulator:
         )
         self.update = jax.jit(self.update)
         self._state = State(
-            time=jnp.float32(0.0),
+            time=0.0,
             sphere_center=self._sphere.center,
             water_heights=self._stacked_rectanguloid.corner1[:, 1],
             sphere_velocity=jnp.zeros_like(self._sphere.center),
             water_velocities=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
-            wave_speed=jnp.float32(2.0),
+            wave_speed=2.0,
             body_heights=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
         )
         self._n = n
@@ -145,7 +145,7 @@ class Simulator:
 
         # Now let us add some behaviour to the sphere.
         sphere_velocity += self.TIME_DELTA * jnp.array(
-            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=jnp.float32
+            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocity.dtype
         )
 
         sphere_center = sphere.center + self.TIME_DELTA * sphere_velocity

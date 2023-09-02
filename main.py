@@ -11,6 +11,7 @@ import textures
 import simulation
 import collisions
 import jax.numpy as jnp
+import jax
 
 
 def update_orbit_camera_position(
@@ -47,37 +48,41 @@ class App:
         self._init_rectanguloids()
 
         self._sphere = collisions.Sphere(
-            jnp.array([0.0, 1.0, 0.0], dtype=jnp.float32), 0.3
+            np.array([0.0, 1.0, 0.0], dtype=np.float32), np.float32(0.3)
         )
         self._simulator = simulation.Simulator(
-            self._sphere, self._rectanguloids, self._n, self._m, cube_width
+            jax.tree_map(jnp.float_, self._sphere),
+            self._rectanguloids,
+            self._n,
+            self._m,
+            cube_width,
         )
 
     def _init_rectanguloids(self) -> None:
         x_tick_diff = self._cube_width
         z_tick_diff = self._cube_width
 
-        x_ticks = np.arange(0.0, self._n, dtype=np.float32) * self._cube_width
-        z_ticks = np.arange(0.0, self._m, dtype=np.float32) * self._cube_width
+        x_ticks = np.arange(0.0, self._n, dtype=np.float64) * self._cube_width
+        z_ticks = np.arange(0.0, self._m, dtype=np.float64) * self._cube_width
 
         translate = np.array(
             [(self._n * self._cube_width) / 2, 0.0, (self._m * self._cube_width) / 2],
-            dtype=np.float32,
+            dtype=np.float64,
         )
         for x_tick in x_ticks:
             for z_tick in z_ticks:
-                corner0 = np.array([x_tick, 0.0, z_tick], dtype=np.float32) - translate
+                corner0 = np.array([x_tick, 0.0, z_tick], dtype=np.float64) - translate
                 corner1 = (
                     np.array(
                         [x_tick + x_tick_diff, 0.8, z_tick + z_tick_diff],
-                        dtype=np.float32,
+                        dtype=np.float64,
                     )
                     - translate
                 )
                 self._rectanguloids.append(
                     collisions.Rectanguloid(
-                        jnp.array(corner0, dtype=jnp.float32),
-                        jnp.array(corner1, dtype=jnp.float32),
+                        jnp.array(corner0, dtype=jnp.float_),
+                        jnp.array(corner1, dtype=jnp.float_),
                     )
                 )
 
@@ -115,7 +120,6 @@ class App:
         while True:
             start = time.monotonic()
             sphere_center, y_scale[:] = self._simulator.simulate()
-            self._sphere = self._sphere._replace(center=sphere_center)
             self._can_update_model.wait()
             self._can_update_model.clear()
             if self._terminate.is_set():
@@ -123,11 +127,12 @@ class App:
                 break
             # else...
             self._model_y = y_scale
+            self._sphere = self._sphere._replace(center=sphere_center)
             self._update_model.set()
 
             y_scale = self._model_y_b if y_scale is self._model_y_a else self._model_y_a
             end = time.monotonic()
-            time.sleep(max(self._simulator.TIME_DELTA.item() - (end - start), 0.0))
+            time.sleep(max(self._simulator.TIME_DELTA - (end - start), 0.0))
 
     def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
