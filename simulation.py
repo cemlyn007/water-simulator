@@ -88,6 +88,7 @@ class Simulator:
         sphere_velocity *= 0.999
 
         body_heights = jnp.reshape(body_heights, (self._n, self._m))
+        # Smooth the body heights field to reduce the amount of spikes and instabilities.
         for _ in range(2):
             padded_body_heights = jnp.pad(body_heights, 1, mode="constant")
             body_heights = jax.scipy.signal.convolve2d(
