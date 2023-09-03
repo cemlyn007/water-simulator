@@ -13,11 +13,11 @@ class State(typing.NamedTuple):
     water_velocities: jnp.ndarray
     wave_speed: float
     body_heights: jnp.ndarray
+    time_delta: float
 
 
 class Simulator:
     GRAVITY_CONSTANT = -9.81
-    TIME_DELTA = 1.0 / 30.0
     POSITIONAL_DAMPING = 1.0
     VELOCITY_DAMPING = 0.3
     ALPHA = 0.5
@@ -43,12 +43,14 @@ class Simulator:
             water_velocities=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
             wave_speed=2.0,
             body_heights=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
+            time_delta=0.0,
         )
         self._n = n
         self._m = m
         self._spacing = spacing
 
-    def simulate(self) -> tuple[jax.Array, jax.Array]:
+    def simulate(self, time_delta: float) -> tuple[jax.Array, jax.Array]:
+        self._state = self._state._replace(time_delta=time_delta)
         self._state = self.update(self._state)
         return self._state.sphere_center, self._state.water_heights
 
@@ -83,7 +85,7 @@ class Simulator:
         )
 
         sphere_velocity = state.sphere_velocity.at[1].set(
-            state.sphere_velocity[1] + self.TIME_DELTA * force / sphere_mass
+            state.sphere_velocity[1] + state.time_delta * force / sphere_mass
         )
         sphere_velocity *= 0.999
 
@@ -101,6 +103,7 @@ class Simulator:
                     ]
                 ),
                 mode="valid",
+                precision="highest",
             ) / (
                 2 * jnp.ones_like(body_heights)
                 + jnp.ones_like(body_heights).at[0, :].set(0.0).at[-1, :].set(0.0)
@@ -113,13 +116,15 @@ class Simulator:
         water_heights += self.ALPHA * body_change
 
         wave_speed = jnp.minimum(
-            state.wave_speed, 0.5 * self._spacing / self.TIME_DELTA
+            state.wave_speed, 0.5 * self._spacing / state.time_delta
         )
 
         c = jnp.square(wave_speed) / jnp.square(self._spacing)
-        positional_damping = jnp.minimum(self.POSITIONAL_DAMPING * self.TIME_DELTA, 1.0)
+        positional_damping = jnp.minimum(
+            self.POSITIONAL_DAMPING * state.time_delta, 1.0
+        )
         velocity_damping = jnp.maximum(
-            0.0, 1.0 - self.VELOCITY_DAMPING * self.TIME_DELTA
+            0.0, 1.0 - self.VELOCITY_DAMPING * state.time_delta
         )
 
         water_velocities = state.water_velocities.reshape((self._n, self._m))
@@ -135,21 +140,22 @@ class Simulator:
                 ]
             ),
             mode="valid",
+            precision="highest",
         )
-        water_velocities += self.TIME_DELTA * c * (sums - 4.0 * water_heights)
+        water_velocities += state.time_delta * c * (sums - 4.0 * water_heights)
         water_heights += (0.25 * sums - water_heights) * positional_damping
 
         water_velocities *= velocity_damping
-        water_heights += self.TIME_DELTA * water_velocities
+        water_heights += state.time_delta * water_velocities
 
         sphere_restitution = 0.1
 
         # Now let us add some behaviour to the sphere.
-        sphere_velocity += self.TIME_DELTA * jnp.array(
+        sphere_velocity += state.time_delta * jnp.array(
             [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocity.dtype
         )
 
-        sphere_center = sphere.center + self.TIME_DELTA * sphere_velocity
+        sphere_center = sphere.center + state.time_delta * sphere_velocity
 
         sphere_touching_floor = sphere_center[1] < self._sphere.radius
 
@@ -166,11 +172,12 @@ class Simulator:
 
         # Now let us add the behaviour between the sphere and the walls.
         return State(
-            time=state.time + self.TIME_DELTA,
+            time=state.time + state.time_delta,
             sphere_center=sphere_center,
             water_heights=jnp.ravel(water_heights),
             sphere_velocity=sphere_velocity,
             water_velocities=jnp.ravel(water_velocities),
             wave_speed=wave_speed,
             body_heights=jnp.ravel(body_heights),
+            time_delta=state.time_delta,
         )

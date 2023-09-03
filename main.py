@@ -5,7 +5,6 @@ import numpy as np
 import glm
 import threading
 import math
-import time
 import meshes
 import textures
 import simulation
@@ -44,6 +43,10 @@ class App:
         self._model_y_b = np.zeros(self._instances, dtype=np.float32)
         self._framebuffer_size_changed = False
 
+        self._jax_float = (
+            jnp.float64 if jax.config.jax_default_dtype_bits == "64" else jnp.float32
+        )
+
         self._rectanguloids = []
         self._init_rectanguloids()
 
@@ -51,7 +54,7 @@ class App:
             np.array([0.0, 1.0, 0.0], dtype=np.float32), np.float32(0.3)
         )
         self._simulator = simulation.Simulator(
-            jax.tree_map(jnp.float_, self._sphere),
+            jax.tree_map(self._jax_float, self._sphere),
             self._rectanguloids,
             self._n,
             self._m,
@@ -81,8 +84,8 @@ class App:
                 )
                 self._rectanguloids.append(
                     collisions.Rectanguloid(
-                        jnp.array(corner0, dtype=jnp.float_),
-                        jnp.array(corner1, dtype=jnp.float_),
+                        jnp.array(corner0, dtype=self._jax_float),
+                        jnp.array(corner1, dtype=self._jax_float),
                     )
                 )
 
@@ -111,28 +114,6 @@ class App:
     def scroll_callback(self, window, xoffset: float, yoffset: float) -> None:
         self.current_scroll_offset.x = xoffset
         self.current_scroll_offset.y = yoffset
-
-    def simulation_thread(self) -> None:
-        self._can_update_model.set()
-        y_scale = self._model_y_a
-
-        sphere_center = self._sphere.center
-        while True:
-            start = time.monotonic()
-            sphere_center, y_scale[:] = self._simulator.simulate()
-            self._can_update_model.wait()
-            self._can_update_model.clear()
-            if self._terminate.is_set():
-                print("[SIM] Terminating", flush=True)
-                break
-            # else...
-            self._model_y = y_scale
-            self._sphere = self._sphere._replace(center=sphere_center)
-            self._update_model.set()
-
-            y_scale = self._model_y_b if y_scale is self._model_y_a else self._model_y_a
-            end = time.monotonic()
-            time.sleep(max(self._simulator.TIME_DELTA - (end - start), 0.0))
 
     def render_until(self, elapsed_time: float = float("inf")) -> None:
         try:
@@ -256,6 +237,7 @@ class App:
             water.set_light_position(light_position)
 
             smoothing = 0.1
+            time_delta = 1 / 30.0
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
@@ -316,14 +298,16 @@ class App:
                     container.set_view_position(camera_position)
                     water.set_view_position(camera_position)
 
-                if self._update_model.is_set():
-                    self._update_model.clear()
-                    sphere_model = glm.translate(
-                        glm.mat4(1.0), glm.vec3(*self._sphere.center)
-                    )
-                    ball.set_model(sphere_model)
-                    water.set_water_heights(glm.array(self._model_y))
-                    self._can_update_model.set()
+                sphere_center, self._model_y[:] = self._simulator.simulate(
+                    min(1.0 / 30.0, 2.0 * time_delta)
+                )
+                self._sphere = self._sphere._replace(center=sphere_center)
+
+                sphere_model = glm.translate(
+                    glm.mat4(1.0), glm.vec3(*self._sphere.center)
+                )
+                ball.set_model(sphere_model)
+                water.set_water_heights(glm.array(self._model_y))
 
                 if self._framebuffer_size_changed:
                     projection = glm.perspective(
@@ -362,7 +346,7 @@ class App:
                 glfw.swap_buffers(window)
                 glfw.poll_events()
                 end = glfw.get_time()
-                cost = end - start
+                time_delta = end - start
                 # print(f"[GL] Frame cost: {cost*1000.:.2f}ms")
         finally:
             print("[GL] Terminating", flush=True)
@@ -375,7 +359,4 @@ if __name__ == "__main__":
     n = 100
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02, 0.5)
-    simulation_thread = threading.Thread(target=app.simulation_thread)
-    simulation_thread.start()
     app.render_until()
-    simulation_thread.join()
