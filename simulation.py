@@ -90,7 +90,7 @@ class Simulator:
         sphere_velocity = state.sphere_velocity.at[:, 1].set(
             state.sphere_velocity[:, 1] + state.time_delta * force / sphere_mass
         )
-        sphere_velocity *= 0.999
+        sphere_velocity *= 0.975
 
         body_heights = jnp.sum(body_heights, axis=0)
         body_heights = jnp.reshape(body_heights, (self._n, self._m))
