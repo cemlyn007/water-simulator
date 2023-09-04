@@ -65,6 +65,11 @@ class App:
                 np.float32(0.2),
             ),
         ]
+        self._ball_colors = [
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ]
         self._simulator = simulation.Simulator(
             [jax.tree_map(self._jax_float, sphere) for sphere in self._spheres],
             self._rectanguloids,
@@ -231,9 +236,9 @@ class App:
             container.set_view_position(camera_position)
             container.set_light_position(light_position)
 
-            for sphere, ball in zip(self._spheres, balls):
+            for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
                 ball.set_projection(projection)
-                ball.set_color(glm.vec3(0.7, 0.1, 0.1))
+                ball.set_color(glm.vec3(*color))
                 ball.set_view(view)
                 sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*sphere.center))
                 ball.set_model(sphere_model)
