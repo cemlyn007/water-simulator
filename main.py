@@ -43,9 +43,7 @@ class App:
         self._model_y_b = np.zeros(self._instances, dtype=np.float32)
         self._framebuffer_size_changed = False
 
-        self._jax_float = (
-            jnp.float64 if jax.config.jax_default_dtype_bits == "64" else jnp.float32
-        )
+        self._jax_float = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
 
         self._rectanguloids = []
         self._init_rectanguloids()
