@@ -48,11 +48,25 @@ class App:
         self._rectanguloids = []
         self._init_rectanguloids()
 
-        self._sphere = collisions.Sphere(
-            np.array([0.0, 1.0, 0.0], dtype=np.float32), np.float32(0.3)
-        )
+        self._spheres = [
+            collisions.Sphere(
+                np.array([-0.5, 1.0, -0.5], dtype=np.float32),
+                np.float32(0.2),
+                np.float32(2.0),
+            ),
+            collisions.Sphere(
+                np.array([0.5, 1.0, -0.5], dtype=np.float32),
+                np.float32(0.3),
+                np.float32(0.7),
+            ),
+            collisions.Sphere(
+                np.array([0.5, 1.0, 0.5], dtype=np.float32),
+                np.float32(0.25),
+                np.float32(0.2),
+            ),
+        ]
         self._simulator = simulation.Simulator(
-            jax.tree_map(self._jax_float, self._sphere),
+            [jax.tree_map(self._jax_float, sphere) for sphere in self._spheres],
             self._rectanguloids,
             self._n,
             self._m,
@@ -181,7 +195,7 @@ class App:
                 ((max(self._n, self._m) - 1) * self._cube_width) / 2.0,
                 self._cube_width * 2,
             )
-            ball = meshes.Ball(self._sphere.radius.item())
+            balls = [meshes.Ball(sphere.radius.item()) for sphere in self._spheres]
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
             camera_position = glm.vec3(3.0, 3.0, 3.0)
@@ -217,14 +231,15 @@ class App:
             container.set_view_position(camera_position)
             container.set_light_position(light_position)
 
-            ball.set_projection(projection)
-            ball.set_color(glm.vec3(0.7, 0.1, 0.1))
-            ball.set_view(view)
-            sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*self._sphere.center))
-            ball.set_model(sphere_model)
-            ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
-            ball.set_view_position(camera_position)
-            ball.set_light_position(light_position)
+            for sphere, ball in zip(self._spheres, balls):
+                ball.set_projection(projection)
+                ball.set_color(glm.vec3(0.7, 0.1, 0.1))
+                ball.set_view(view)
+                sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*sphere.center))
+                ball.set_model(sphere_model)
+                ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+                ball.set_view_position(camera_position)
+                ball.set_light_position(light_position)
 
             water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
             water.set_texture(self._background_camera.rendered_texture)
@@ -289,22 +304,27 @@ class App:
                         glm.vec3(0.0, 1.0, 0.0),
                     )
                     light.set_view(view)
-                    ball.set_view(view)
+                    for ball in balls:
+                        ball.set_view(view)
                     container.set_view(view)
                     water.set_view(view)
-                    ball.set_view_position(camera_position)
+                    for ball in balls:
+                        ball.set_view_position(camera_position)
                     container.set_view_position(camera_position)
                     water.set_view_position(camera_position)
 
                 sphere_center, self._model_y[:] = self._simulator.simulate(
                     min(1.0 / 30.0, 2.0 * time_delta)
                 )
-                self._sphere = self._sphere._replace(center=sphere_center)
+                for i in range(len(self._spheres)):
+                    self._spheres[i] = self._spheres[i]._replace(
+                        center=sphere_center[i]
+                    )
+                    sphere_model = glm.translate(
+                        glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
+                    )
+                    balls[i].set_model(sphere_model)
 
-                sphere_model = glm.translate(
-                    glm.mat4(1.0), glm.vec3(*self._sphere.center)
-                )
-                ball.set_model(sphere_model)
                 water.set_water_heights(glm.array(self._model_y))
 
                 if self._framebuffer_size_changed:
@@ -315,7 +335,8 @@ class App:
                         100.0,
                     )
                     light.set_projection(projection)
-                    ball.set_projection(projection)
+                    for ball in balls:
+                        ball.set_projection(projection)
                     container.set_projection(projection)
                     water.set_projection(projection)
                     self._background_camera.resize(
@@ -327,7 +348,8 @@ class App:
                 glClearColor(0.1, 0.1, 0.1, 1.0)
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
                 container.draw()
-                ball.draw()
+                for ball in balls:
+                    ball.draw()
                 self._background_camera.unbind()
 
                 glViewport(
@@ -338,7 +360,8 @@ class App:
 
                 light.draw()
                 container.draw()
-                ball.draw()
+                for ball in balls:
+                    ball.draw()
                 water.draw()
 
                 glfw.swap_buffers(window)

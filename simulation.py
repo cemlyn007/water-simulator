@@ -24,22 +24,22 @@ class Simulator:
 
     def __init__(
         self,
-        sphere: collisions.Sphere,
+        spheres: Sequence[collisions.Sphere],
         rectanguloids: Sequence[collisions.Rectanguloid],
         n: int,
         m: int,
         spacing: float,
     ) -> None:
-        self._sphere = sphere
+        self._spheres = jax.tree_map(lambda *x: jnp.stack(x), *spheres)
         self._stacked_rectanguloid = jax.tree_map(
             lambda *x: jnp.stack(x), *rectanguloids
         )
-        self.update = jax.jit(self.update)
+        self.update = jax.jit(self.update, inline=True)
         self._state = State(
             time=0.0,
-            sphere_center=self._sphere.center,
+            sphere_center=self._spheres.center,
             water_heights=self._stacked_rectanguloid.corner1[:, 1],
-            sphere_velocity=jnp.zeros_like(self._sphere.center),
+            sphere_velocity=jnp.zeros_like(self._spheres.center),
             water_velocities=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
             wave_speed=2.0,
             body_heights=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
@@ -55,7 +55,7 @@ class Simulator:
         return self._state.sphere_center, self._state.water_heights
 
     def update(self, state: State) -> State:
-        sphere = self._sphere._replace(center=state.sphere_center)
+        spheres = self._spheres._replace(center=state.sphere_center)
 
         # Now let us handle the behaviour between the sphere and the water.
         grid_centers = (
@@ -64,14 +64,18 @@ class Simulator:
         ) / 2.0
 
         r2 = jnp.sum(
-            jnp.square(grid_centers - sphere.center[jnp.array([0, 2])]), axis=-1
+            jnp.square(
+                grid_centers[None, :, :]
+                - spheres.center[:, jnp.array([0, 2])][:, None, :]
+            ),
+            axis=-1,
         )
 
-        collision_mask = r2 < jnp.square(self._sphere.radius)
-        body_half_heights = jnp.sqrt(jnp.square(self._sphere.radius) - r2)
-        min_body = jnp.maximum(sphere.center[1] - body_half_heights, 0.0)
+        collision_mask = r2 < jnp.square(spheres.radius[:, None])
+        body_half_heights = jnp.sqrt(jnp.square(spheres.radius[:, None]) - r2)
+        min_body = jnp.maximum(spheres.center[:, [1]] - body_half_heights, 0.0)
         max_body = jnp.minimum(
-            sphere.center[1] + body_half_heights, state.water_heights
+            spheres.center[:, [1]] + body_half_heights, state.water_heights[None, :]
         )
         body_heights = jnp.maximum(max_body - min_body, 0.0)
         body_heights = jnp.where(collision_mask, body_heights, 0.0)
@@ -79,35 +83,25 @@ class Simulator:
         forces = -body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         force = jnp.sum(forces, axis=-1)
 
-        sphere_density = 0.7
         sphere_mass = (
-            4 * jnp.pi / 3 * jnp.power(self._sphere.radius, 3) * sphere_density
+            4.0 * jnp.pi / 3.0 * jnp.power(spheres.radius, 3) * spheres.density
         )
 
-        sphere_velocity = state.sphere_velocity.at[1].set(
-            state.sphere_velocity[1] + state.time_delta * force / sphere_mass
+        sphere_velocity = state.sphere_velocity.at[:, 1].set(
+            state.sphere_velocity[:, 1] + state.time_delta * force / sphere_mass
         )
         sphere_velocity *= 0.999
 
+        body_heights = jnp.sum(body_heights, axis=0)
         body_heights = jnp.reshape(body_heights, (self._n, self._m))
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
         for _ in range(2):
             padded_body_heights = jnp.pad(body_heights, 1, mode="constant")
             body_heights = jax.scipy.signal.convolve2d(
                 padded_body_heights,
-                jnp.array(
-                    [
-                        [0.0, 1.0, 0.0],
-                        [1.0, 0.0, 1.0],
-                        [0.0, 1.0, 0.0],
-                    ]
-                ),
+                jnp.ones((3, 3), dtype=body_heights.dtype) / 9.0,
                 mode="valid",
                 precision="highest",
-            ) / (
-                2 * jnp.ones_like(body_heights)
-                + jnp.ones_like(body_heights).at[0, :].set(0.0).at[-1, :].set(0.0)
-                + jnp.ones_like(body_heights).at[:, 0].set(0.0).at[:, -1].set(0.0)
             )
 
         previous_body_heights = jnp.reshape(state.body_heights, (self._n, self._m))
@@ -155,18 +149,18 @@ class Simulator:
             [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocity.dtype
         )
 
-        sphere_center = sphere.center + state.time_delta * sphere_velocity
+        sphere_center = spheres.center + state.time_delta * sphere_velocity
 
-        sphere_touching_floor = sphere_center[1] < self._sphere.radius
+        sphere_touching_floor = sphere_center[:, 1] < spheres.radius
 
-        sphere_center = sphere_center.at[1].set(
-            jnp.where(sphere_touching_floor, self._sphere.radius, sphere_center[1])
+        sphere_center = sphere_center.at[:, 1].set(
+            jnp.where(sphere_touching_floor, spheres.radius, sphere_center[:, 1])
         )
-        sphere_velocity = sphere_velocity.at[1].set(
+        sphere_velocity = sphere_velocity.at[:, 1].set(
             jnp.where(
                 sphere_touching_floor,
-                -sphere_restitution * sphere_velocity[1],
-                sphere_velocity[1],
+                -sphere_restitution * sphere_velocity[:, 1],
+                sphere_velocity[:, 1],
             )
         )
 
