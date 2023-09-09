@@ -11,6 +11,7 @@ import simulation
 import collisions
 import jax.numpy as jnp
 import jax
+import raycasting
 
 
 def update_orbit_camera_position(
@@ -196,14 +197,16 @@ class App:
 
             light = meshes.Light()
             water = meshes.Water(self._n, self._m, self._cube_width)
+            wall_size = ((max(self._n, self._m) - 1) * self._cube_width) / 2.0
+            wall_thickness = self._cube_width * 2
             container = meshes.Container(
-                ((max(self._n, self._m) - 1) * self._cube_width) / 2.0,
-                self._cube_width * 2,
+                wall_size,
+                wall_thickness,
             )
             balls = [meshes.Ball(sphere.radius.item()) for sphere in self._spheres]
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
-            camera_position = glm.vec3(3.0, 3.0, 3.0)
+            camera_position = glm.vec3(3.0, 7.0, 3.0)
             camera_radians = glm.vec2(0.0, 0.0)
 
             view = glm.lookAt(
@@ -254,8 +257,103 @@ class App:
             water.set_projection(projection)
             water.set_light_position(light_position)
 
+            raycaster = raycasting.Raycaster(
+                {
+                    "floor": (
+                        raycasting.BoundedPlane(
+                            normal=jnp.array([0.0, 1.0, 0.0], dtype=self._jax_float),
+                            offset=jnp.array([0.0, 0.0, 0.0], dtype=self._jax_float),
+                            min_point=jnp.array(
+                                [-1.0, 0.0, -1.0], dtype=self._jax_float
+                            )
+                            * (wall_size + wall_thickness),
+                            max_point=jnp.array([1.0, 0.0, 1.0], dtype=self._jax_float)
+                            * (wall_size + wall_thickness),
+                        ),
+                    ),
+                    "walls": (
+                        # West Wall.
+                        raycasting.Rectanguloid(
+                            jnp.array(
+                                [
+                                    -wall_size - wall_thickness,
+                                    0.0,
+                                    -wall_size - wall_thickness,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                            jnp.array(
+                                [
+                                    -wall_size,
+                                    1.25,
+                                    wall_size,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                        ),
+                        # North Wall.
+                        raycasting.Rectanguloid(
+                            jnp.array(
+                                [-wall_size - wall_thickness, 0.0, wall_size],
+                                dtype=self._jax_float,
+                            ),
+                            jnp.array(
+                                [
+                                    wall_size + wall_thickness,
+                                    1.25,
+                                    wall_size + wall_thickness,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                        ),
+                        # East Wall.
+                        raycasting.Rectanguloid(
+                            jnp.array(
+                                [
+                                    wall_size,
+                                    0.0,
+                                    -wall_size - wall_thickness,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                            jnp.array(
+                                [
+                                    wall_size + wall_thickness,
+                                    1.25,
+                                    wall_size + wall_thickness,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                        ),
+                        # South Wall.
+                        raycasting.Rectanguloid(
+                            jnp.array(
+                                [
+                                    -wall_size - wall_thickness,
+                                    0.0,
+                                    -wall_size - wall_thickness,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                            jnp.array(
+                                [
+                                    wall_size + wall_thickness,
+                                    1.25,
+                                    -wall_size,
+                                ],
+                                dtype=self._jax_float,
+                            ),
+                        ),
+                    ),
+                    "spheres": tuple(
+                        raycasting.Sphere(sphere.center, sphere.radius)
+                        for sphere in self._spheres
+                    ),
+                },
+            )
+
             smoothing = 0.1
-            time_delta = 1 / 30.0
+            time_delta = 1 / 60.0
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
@@ -318,20 +416,6 @@ class App:
                     container.set_view_position(camera_position)
                     water.set_view_position(camera_position)
 
-                sphere_center, self._model_y[:] = self._simulator.simulate(
-                    min(1.0 / 30.0, 2.0 * time_delta)
-                )
-                for i in range(len(self._spheres)):
-                    self._spheres[i] = self._spheres[i]._replace(
-                        center=sphere_center[i]
-                    )
-                    sphere_model = glm.translate(
-                        glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
-                    )
-                    balls[i].set_model(sphere_model)
-
-                water.set_water_heights(glm.array(self._model_y))
-
                 if self._framebuffer_size_changed:
                     projection = glm.perspective(
                         glm.radians(60.0),
@@ -348,6 +432,53 @@ class App:
                         self._framebuffer_width_size, self._framebuffer_height_size
                     )
                     self._framebuffer_size_changed = False
+
+                cursor_position = self.current_cursor_position
+                if (
+                    glfw.get_mouse_button(window, glfw.MOUSE_BUTTON_LEFT)
+                    and cursor_position.x > 0
+                    and cursor_position.x < self._width
+                    and cursor_position.y > 0
+                    and cursor_position.y < self._height
+                ):
+                    ray_direction = self._get_cursor_ray(
+                        cursor_position, projection, view
+                    )
+                    ray_direction = jnp.array(ray_direction, dtype=self._jax_float)
+
+                    for sphere_index, sphere in enumerate(self._spheres):
+                        raycaster.grouped_objects["spheres"][
+                            sphere_index
+                        ].center = sphere.center
+
+                    jax_camera_position = jnp.array(
+                        [camera_position.x, camera_position.y, camera_position.z],
+                        dtype=self._jax_float,
+                    )
+                    intersection = raycaster.cast(
+                        jax_camera_position,
+                        ray_direction,
+                    )
+
+                    if intersection is not None:
+                        print(
+                            f"[GL] Intersection: {intersection[0]}, {intersection[1]}",
+                            flush=True,
+                        )
+
+                sphere_center, self._model_y[:] = self._simulator.simulate(
+                    min(1.0 / 60.0, 2.0 * time_delta)
+                )
+                for i in range(len(self._spheres)):
+                    self._spheres[i] = self._spheres[i]._replace(
+                        center=sphere_center[i]
+                    )
+                    sphere_model = glm.translate(
+                        glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
+                    )
+                    balls[i].set_model(sphere_model)
+
+                water.set_water_heights(glm.array(self._model_y))
 
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
@@ -373,12 +504,26 @@ class App:
                 glfw.poll_events()
                 end = glfw.get_time()
                 time_delta = end - start
-                # print(f"[GL] Frame cost: {cost*1000.:.2f}ms")
+                print(f"[GL] Time Delta: {time_delta*1000.:.2f}ms")
         finally:
             print("[GL] Terminating", flush=True)
             self._can_update_model.set()
             self._terminate.set()
             glfw.terminate()
+
+    def _get_cursor_ray(
+        self, cursor_position: glm.vec2, projection: glm.mat4, view: glm.mat4
+    ) -> glm.vec3:
+        x = (2.0 * cursor_position.x) / self._width - 1.0
+        y = 1.0 - (2.0 * cursor_position.y) / self._height
+        z = 1.0
+        ray_nds = glm.vec3(x, y, z)
+        ray_clip = glm.vec4(ray_nds.xy, -1.0, 1.0)
+        ray_eye = glm.inverse(projection) * ray_clip
+        ray_eye = glm.vec4(ray_eye.xy, -1.0, 0.0)
+        ray_world = glm.vec3(glm.inverse(view) * ray_eye).xyz
+        ray_world = glm.normalize(ray_world)
+        return ray_world
 
 
 if __name__ == "__main__":
