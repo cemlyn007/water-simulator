@@ -486,9 +486,6 @@ class App:
                     current_selected_entity = None
 
                 time_delta = min(1.0 / 60.0, 2.0 * time_delta)
-                new_simulator_state = self._simulator.simulate(
-                    simulator_state, time_delta
-                )
                 if current_selected_entity:
                     (
                         selected_entity_type,
@@ -522,20 +519,17 @@ class App:
 
                         sphere_center += sphere_velocity * time_delta
 
-                        new_simulator_state = new_simulator_state._replace(
-                            sphere_centers=new_simulator_state.sphere_centers.at[
+                        simulator_state = simulator_state._replace(
+                            sphere_centers=simulator_state.sphere_centers.at[
                                 selected_entity_index
                             ].set(sphere_center),
-                            sphere_velocities=new_simulator_state.sphere_velocities.at[
+                            sphere_velocities=simulator_state.sphere_velocities.at[
                                 selected_entity_index
                             ].set(sphere_velocity),
                         )
 
-                        self._spheres[selected_entity_index] = self._spheres[
-                            selected_entity_index
-                        ]._replace(center=sphere_center)
+                simulator_state = self._simulator.simulate(simulator_state, time_delta)
 
-                simulator_state = new_simulator_state
                 previous_selected_entity = current_selected_entity
                 sphere_center = simulator_state.sphere_centers
                 self._model_y[:] = simulator_state.water_heights
