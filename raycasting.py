@@ -201,7 +201,7 @@ class Raycaster:
 
     def cast(
         self, camera_position: jax.Array, ray_direction: jax.Array
-    ) -> Optional[tuple[str, int]]:
+    ) -> Optional[tuple[str, int, float]]:
         # https://antongerdelan.net/opengl/raycasting.html
         group_intersections = {
             group_name: self._jit_cast[group_name](
@@ -229,8 +229,7 @@ class Raycaster:
         if len(results) == 0:
             return None
         # else...
-        results.sort(key=lambda x: x[2])
-        return (results[0][0], results[0][1])
+        return min(results, key=lambda x: x[2])
 
     def _cast(
         self,

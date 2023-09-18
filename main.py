@@ -35,7 +35,7 @@ class App:
         self.current_cursor_position = glm.vec2(0.0, 0.0)
         self.last_cursor_position = glm.vec2(0.0, 0.0)
         self.current_scroll_offset = glm.vec2(0.0, 0.0)
-        self.rotate_camera = False
+        self.left_button_pressed = False
         self._can_update_model = threading.Event()
         self._update_model = threading.Event()
         self._terminate = threading.Event()
@@ -127,7 +127,9 @@ class App:
     def mouse_button_callback(
         self, window, button: int, action: int, mods: int
     ) -> None:
-        self.rotate_camera = button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS
+        self.left_button_pressed = (
+            button == glfw.MOUSE_BUTTON_LEFT and action == glfw.PRESS
+        )
 
     def scroll_callback(self, window, xoffset: float, yoffset: float) -> None:
         self.current_scroll_offset.x = xoffset
@@ -351,17 +353,26 @@ class App:
                     ),
                 },
             )
+            simulator_state = self._simulator.init_state()
+            current_selected_entity = None
 
             smoothing = 0.1
             time_delta = 1 / 60.0
+            ray_direction = jnp.empty((3,), dtype=self._jax_float)
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
                 start = glfw.get_time()
-                cursor_position_change = (
-                    self.current_cursor_position - self.last_cursor_position
+
+                rotate_camera = self.left_button_pressed and (
+                    current_selected_entity is None
+                    or current_selected_entity[0] != "spheres"
                 )
-                if self.rotate_camera:
+
+                if rotate_camera:
+                    cursor_position_change = (
+                        self.current_cursor_position - self.last_cursor_position
+                    )
                     camera_radians.x += math.radians(
                         smoothing * cursor_position_change.x
                     )
@@ -372,7 +383,7 @@ class App:
                     camera_radians.y %= 2.0 * math.pi
 
                 camera_changed = (
-                    self.rotate_camera
+                    rotate_camera
                     or self.current_scroll_offset.x != 0
                     or self.current_scroll_offset.y != 0
                 )
@@ -434,6 +445,7 @@ class App:
                     self._framebuffer_size_changed = False
 
                 cursor_position = self.current_cursor_position
+                previous_selected_entity = current_selected_entity
                 if (
                     glfw.get_mouse_button(window, glfw.MOUSE_BUTTON_LEFT)
                     and cursor_position.x > 0
@@ -446,29 +458,88 @@ class App:
                     )
                     ray_direction = jnp.array(ray_direction, dtype=self._jax_float)
 
-                    for sphere_index, sphere in enumerate(self._spheres):
-                        raycaster.grouped_objects["spheres"][
-                            sphere_index
-                        ].center = sphere.center
-
                     jax_camera_position = jnp.array(
                         [camera_position.x, camera_position.y, camera_position.z],
                         dtype=self._jax_float,
                     )
-                    intersection = raycaster.cast(
-                        jax_camera_position,
-                        ray_direction,
-                    )
 
-                    if intersection is not None:
-                        print(
-                            f"[GL] Intersection: {intersection[0]}, {intersection[1]}",
-                            flush=True,
+                    if current_selected_entity is None:
+                        for sphere_index, sphere in enumerate(self._spheres):
+                            raycaster.grouped_objects["spheres"][
+                                sphere_index
+                            ].center = sphere.center
+
+                        current_selected_entity = raycaster.cast(
+                            jax_camera_position,
+                            ray_direction,
                         )
 
-                sphere_center, self._model_y[:] = self._simulator.simulate(
-                    min(1.0 / 60.0, 2.0 * time_delta)
+                        if current_selected_entity is not None:
+                            print(
+                                f"[GL] Intersection: {current_selected_entity[0]}, {current_selected_entity[1]}",
+                                flush=True,
+                            )
+
+                if current_selected_entity and not glfw.get_mouse_button(
+                    window, glfw.MOUSE_BUTTON_LEFT
+                ):
+                    current_selected_entity = None
+
+                time_delta = min(1.0 / 60.0, 2.0 * time_delta)
+                new_simulator_state = self._simulator.simulate(
+                    simulator_state, time_delta
                 )
+                if current_selected_entity:
+                    (
+                        selected_entity_type,
+                        selected_entity_index,
+                        intersection_distance,
+                    ) = current_selected_entity
+                    if selected_entity_type == "spheres":
+                        sphere_center = simulator_state.sphere_centers[
+                            selected_entity_index
+                        ]
+                        pos = (
+                            jax_camera_position
+                            + (ray_direction / jnp.linalg.norm(ray_direction))
+                            * intersection_distance
+                        )
+                        if (
+                            current_selected_entity is not None
+                            and previous_selected_entity is None
+                            or (
+                                current_selected_entity[:2]
+                                != previous_selected_entity[:2]
+                            )
+                        ):
+                            grab_position = pos
+                            sphere_velocity = jnp.zeros((3,), dtype=self._jax_float)
+                        else:
+                            sphere_velocity = (
+                                pos - grab_position
+                            ) * intersection_distance
+                            grab_position = pos
+
+                        sphere_center += sphere_velocity * time_delta
+
+                        new_simulator_state = new_simulator_state._replace(
+                            sphere_centers=new_simulator_state.sphere_centers.at[
+                                selected_entity_index
+                            ].set(sphere_center),
+                            sphere_velocities=new_simulator_state.sphere_velocities.at[
+                                selected_entity_index
+                            ].set(sphere_velocity),
+                        )
+
+                        self._spheres[selected_entity_index] = self._spheres[
+                            selected_entity_index
+                        ]._replace(center=sphere_center)
+
+                simulator_state = new_simulator_state
+                previous_selected_entity = current_selected_entity
+                sphere_center = simulator_state.sphere_centers
+                self._model_y[:] = simulator_state.water_heights
+
                 for i in range(len(self._spheres)):
                     self._spheres[i] = self._spheres[i]._replace(
                         center=sphere_center[i]
