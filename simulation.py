@@ -37,6 +37,7 @@ class Simulator:
         self.update = jax.jit(self.update, inline=True)
         self._n = n
         self._m = m
+        self._tank_size = (jnp.array([n, m], dtype=jnp.float32) * spacing) * 0.5
         self._spacing = spacing
 
     def init_state(self) -> State:
@@ -156,6 +157,76 @@ class Simulator:
                 sphere_touching_floor,
                 -sphere_restitution * sphere_velocities[:, 1],
                 sphere_velocities[:, 1],
+            )
+        )
+
+        sphere_touching_north_wall = (
+            sphere_center[:, 2] + spheres.radius > self._tank_size[1]
+        )
+        sphere_touching_south_wall = (
+            sphere_center[:, 2] - spheres.radius < -self._tank_size[1]
+        )
+        sphere_touching_west_wall = (
+            sphere_center[:, 0] + spheres.radius > self._tank_size[0]
+        )
+        sphere_touching_east_wall = (
+            sphere_center[:, 0] - spheres.radius < -self._tank_size[0]
+        )
+
+        sphere_center = sphere_center.at[:, 2].set(
+            jnp.where(
+                sphere_touching_north_wall,
+                self._tank_size[1] - spheres.radius,
+                sphere_center[:, 2],
+            )
+        )
+        sphere_velocities = sphere_velocities.at[:, 2].set(
+            jnp.where(
+                sphere_touching_north_wall,
+                -sphere_restitution * sphere_velocities[:, 2],
+                sphere_velocities[:, 2],
+            )
+        )
+        sphere_center = sphere_center.at[:, 2].set(
+            jnp.where(
+                sphere_touching_south_wall,
+                -self._tank_size[1] + spheres.radius,
+                sphere_center[:, 2],
+            )
+        )
+        sphere_velocities = sphere_velocities.at[:, 2].set(
+            jnp.where(
+                sphere_touching_south_wall,
+                -sphere_restitution * sphere_velocities[:, 2],
+                sphere_velocities[:, 2],
+            )
+        )
+        sphere_center = sphere_center.at[:, 0].set(
+            jnp.where(
+                sphere_touching_west_wall,
+                self._tank_size[0] - spheres.radius,
+                sphere_center[:, 0],
+            )
+        )
+        sphere_velocities = sphere_velocities.at[:, 0].set(
+            jnp.where(
+                sphere_touching_west_wall,
+                -sphere_restitution * sphere_velocities[:, 0],
+                sphere_velocities[:, 0],
+            )
+        )
+        sphere_center = sphere_center.at[:, 0].set(
+            jnp.where(
+                sphere_touching_east_wall,
+                -self._tank_size[0] + spheres.radius,
+                sphere_center[:, 0],
+            )
+        )
+        sphere_velocities = sphere_velocities.at[:, 0].set(
+            jnp.where(
+                sphere_touching_east_wall,
+                -sphere_restitution * sphere_velocities[:, 0],
+                sphere_velocities[:, 0],
             )
         )
 
