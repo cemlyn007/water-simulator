@@ -14,7 +14,7 @@ void main() {
     // refraction effect
     float r = 0.02;	// todo: should be distance dependent!
     vec2 uv = ScreenPos + r * vec2(Normal.x, Normal.z);
-    vec4 color = texture(background, uv);
+    vec3 color = texture(background, uv).xyz;
     color.z = min(color.z + 0.2, 1.0);
     vec3 L = normalize(vec3(10.0, 10.0, 10.0) - FragPos);
     float s = max(dot(Normal, L), 0.0);
@@ -31,12 +31,12 @@ void main() {
     vec3 diffuse = diff * lightColor;
 
     // specular
-    float specularStrength = 0.5;
+    float specularStrength = 0.9;
     vec3 viewDir = normalize(viewPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 256);
     vec3 specular = specularStrength * spec * lightColor;
 
-    vec4 result = vec4(ambient + diffuse + specular, 1.0) * color;
+    vec4 result = vec4(ambient + diffuse + specular, 1.0) * vec4(color, 1.0);
     FragColor = result;
 }
