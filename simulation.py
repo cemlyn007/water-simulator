@@ -30,6 +30,7 @@ class Simulator:
         m: int,
         spacing: float,
     ) -> None:
+        self._n_spheres = len(spheres)
         self._spheres = jax.tree_map(lambda *x: jnp.stack(x), *spheres)
         self._stacked_rectanguloid = jax.tree_map(
             lambda *x: jnp.stack(x), *rectanguloids
@@ -229,6 +230,75 @@ class Simulator:
                 sphere_velocities[:, 0],
             )
         )
+
+        pairwise_subtract = jax.vmap(
+            jax.vmap(jnp.subtract, (None, 0), 0),
+            (0, None),
+            0,
+        )
+
+        centroid_directions = -1.0 * pairwise_subtract(spheres.center, spheres.center)
+
+        centroid_distances = jnp.linalg.norm(centroid_directions, axis=2)
+
+        pairwise_add = jax.vmap(jax.vmap(jnp.add, (None, 0), 0), (0, None), 0)
+
+        added_radii = pairwise_add(spheres.radius, spheres.radius)
+
+        intersection_mask = centroid_distances < added_radii
+        intersection_mask = intersection_mask.at[jnp.diag_indices(self._n_spheres)].set(
+            False
+        )
+
+        correction = (added_radii - centroid_distances) / 2.0
+
+        collision_direction = centroid_directions / jnp.expand_dims(
+            centroid_distances.at[jnp.diag_indices(self._n_spheres)].set(1.0), 2
+        )
+
+        collision_direction *= intersection_mask[:, :, None]
+
+        sphere_center += jnp.sum(
+            collision_direction * -1.0 * jnp.expand_dims(correction, 2),
+            axis=1,
+        )
+
+        v = jnp.array(
+            [
+                [
+                    jnp.sum(sphere_velocities[i] * collision_direction[i, j])
+                    for j in range(self._n_spheres)
+                ]
+                for i in range(self._n_spheres)
+            ]
+        )
+        sphere_mass_mul_velocities = sphere_mass * v
+        new_v_pairs = jnp.array(
+            [
+                [
+                    (
+                        sphere_mass_mul_velocities[i, j]
+                        + sphere_mass_mul_velocities[j, i]
+                        - (
+                            (sphere_mass[j] * (v[i, j] - v[j, i]))
+                            if i < j
+                            else (sphere_mass[i] * (v[j, i] - v[i, j]))
+                        )
+                        * sphere_restitution
+                    )
+                    / (sphere_mass[i] + sphere_mass[j])
+                    for j in range(self._n_spheres)
+                ]
+                for i in range(self._n_spheres)
+            ]
+        )
+
+        collision_correction_velocities = jnp.sum(
+            collision_direction * (new_v_pairs - v)[:, :, None],
+            axis=1,
+        )
+
+        sphere_velocities += collision_correction_velocities
 
         # Now let us add the behaviour between the sphere and the walls.
         return State(
