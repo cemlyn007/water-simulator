@@ -148,17 +148,14 @@ class Simulator:
 
         sphere_center = spheres.center + time_delta * sphere_velocities
 
-        sphere_touching_floor = sphere_center[:, 1] < spheres.radius
-
-        sphere_center = sphere_center.at[:, 1].set(
-            jnp.where(sphere_touching_floor, spheres.radius, sphere_center[:, 1])
-        )
-        sphere_velocities = sphere_velocities.at[:, 1].set(
-            jnp.where(
-                sphere_touching_floor,
-                -sphere_restitution * sphere_velocities[:, 1],
-                sphere_velocities[:, 1],
-            )
+        (
+            sphere_center,
+            sphere_velocities,
+        ) = self._update_sphere_floor_collision(
+            sphere_center,
+            sphere_velocities,
+            spheres.radius,
+            sphere_restitution,
         )
 
         (
@@ -196,6 +193,27 @@ class Simulator:
             body_heights=jnp.ravel(body_heights),
             time_delta=time_delta,
         )
+
+    def _update_sphere_floor_collision(
+        self,
+        sphere_center: jax.Array,
+        sphere_velocities: jax.Array,
+        sphere_radius: jax.Array,
+        sphere_restitution: float,
+    ) -> tuple[jax.Array, jax.Array]:
+        sphere_touching_floor = sphere_center[:, 1] < sphere_radius
+
+        sphere_center = sphere_center.at[:, 1].set(
+            jnp.where(sphere_touching_floor, sphere_radius, sphere_center[:, 1])
+        )
+        sphere_velocities = sphere_velocities.at[:, 1].set(
+            jnp.where(
+                sphere_touching_floor,
+                -sphere_restitution * sphere_velocities[:, 1],
+                sphere_velocities[:, 1],
+            )
+        )
+        return sphere_center, sphere_velocities
 
     def _update_sphere_wall_collision(
         self,
