@@ -58,8 +58,81 @@ class Simulator:
         return state
 
     def update(self, state: State, time_delta: float) -> State:
-        spheres = self._spheres._replace(center=state.sphere_centers)
+        sphere_restitution = 0.1
+        sphere_mass = (
+            4.0
+            * jnp.pi
+            / 3.0
+            * jnp.power(self._spheres.radius, 3)
+            * self._spheres.density
+        )
 
+        (
+            sphere_center,
+            sphere_velocities,
+            water_heights,
+            body_heights,
+            water_velocities,
+            wave_speed,
+        ) = self._update_sphere_water_collision(
+            state=state,
+            time_delta=time_delta,
+            sphere_mass=sphere_mass,
+        )
+
+        (
+            sphere_center,
+            sphere_velocities,
+        ) = self._update_sphere_floor_collision(
+            sphere_center,
+            sphere_velocities,
+            self._spheres.radius,
+            sphere_restitution,
+        )
+
+        (
+            sphere_center,
+            sphere_velocities,
+        ) = self._update_sphere_wall_collision(
+            sphere_center,
+            sphere_velocities,
+            self._spheres.radius,
+            sphere_restitution,
+        )
+
+        (
+            sphere_collision_positional_correction,
+            sphere_collision_velocity_correction,
+        ) = self._calculate_spherical_collision_correction_updates(
+            sphere_center,
+            sphere_velocities,
+            self._spheres.radius,
+            sphere_mass,
+            sphere_restitution,
+        )
+
+        sphere_center += sphere_collision_positional_correction
+        sphere_velocities += sphere_collision_velocity_correction
+
+        # Now let us add the behaviour between the sphere and the walls.
+        return State(
+            time=state.time + time_delta,
+            sphere_centers=sphere_center,
+            water_heights=jnp.ravel(water_heights),
+            sphere_velocities=sphere_velocities,
+            water_velocities=jnp.ravel(water_velocities),
+            wave_speed=wave_speed,
+            body_heights=jnp.ravel(body_heights),
+            time_delta=time_delta,
+        )
+
+    def _update_sphere_water_collision(
+        self,
+        state: State,
+        time_delta: float,
+        sphere_mass: jax.Array,
+    ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+        spheres = self._spheres._replace(center=state.sphere_centers)
         # Now let us handle the behaviour between the sphere and the water.
         grid_centers = (
             self._stacked_rectanguloid.corner0[:, (0, 2)]
@@ -85,10 +158,6 @@ class Simulator:
 
         forces = -body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         force = jnp.sum(forces, axis=-1)
-
-        sphere_mass = (
-            4.0 * jnp.pi / 3.0 * jnp.power(spheres.radius, 3) * spheres.density
-        )
 
         sphere_velocities = state.sphere_velocities.at[:, 1].set(
             state.sphere_velocities[:, 1] + time_delta * force / sphere_mass
@@ -139,59 +208,19 @@ class Simulator:
         water_velocities *= velocity_damping
         water_heights += time_delta * water_velocities
 
-        sphere_restitution = 0.1
-
         # Now let us add some behaviour to the sphere.
         sphere_velocities += time_delta * jnp.array(
             [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
         )
 
         sphere_center = spheres.center + time_delta * sphere_velocities
-
-        (
+        return (
             sphere_center,
             sphere_velocities,
-        ) = self._update_sphere_floor_collision(
-            sphere_center,
-            sphere_velocities,
-            spheres.radius,
-            sphere_restitution,
-        )
-
-        (
-            sphere_center,
-            sphere_velocities,
-        ) = self._update_sphere_wall_collision(
-            sphere_center,
-            sphere_velocities,
-            spheres.radius,
-            sphere_restitution,
-        )
-
-        (
-            sphere_collision_positional_correction,
-            sphere_collision_velocity_correction,
-        ) = self._calculate_spherical_collision_correction_updates(
-            sphere_center,
-            sphere_velocities,
-            spheres.radius,
-            sphere_mass,
-            sphere_restitution,
-        )
-
-        sphere_center += sphere_collision_positional_correction
-        sphere_velocities += sphere_collision_velocity_correction
-
-        # Now let us add the behaviour between the sphere and the walls.
-        return State(
-            time=state.time + time_delta,
-            sphere_centers=sphere_center,
-            water_heights=jnp.ravel(water_heights),
-            sphere_velocities=sphere_velocities,
-            water_velocities=jnp.ravel(water_velocities),
-            wave_speed=wave_speed,
-            body_heights=jnp.ravel(body_heights),
-            time_delta=time_delta,
+            water_heights,
+            body_heights,
+            water_velocities,
+            wave_speed,
         )
 
     def _update_sphere_floor_collision(
