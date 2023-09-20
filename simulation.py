@@ -161,23 +161,66 @@ class Simulator:
             )
         )
 
+        (
+            sphere_center,
+            sphere_velocities,
+        ) = self._update_sphere_wall_collision(
+            sphere_center,
+            sphere_velocities,
+            spheres.radius,
+            sphere_restitution,
+        )
+
+        (
+            sphere_collision_positional_correction,
+            sphere_collision_velocity_correction,
+        ) = self._calculate_spherical_collision_correction_updates(
+            sphere_center,
+            sphere_velocities,
+            spheres.radius,
+            sphere_mass,
+            sphere_restitution,
+        )
+
+        sphere_center += sphere_collision_positional_correction
+        sphere_velocities += sphere_collision_velocity_correction
+
+        # Now let us add the behaviour between the sphere and the walls.
+        return State(
+            time=state.time + time_delta,
+            sphere_centers=sphere_center,
+            water_heights=jnp.ravel(water_heights),
+            sphere_velocities=sphere_velocities,
+            water_velocities=jnp.ravel(water_velocities),
+            wave_speed=wave_speed,
+            body_heights=jnp.ravel(body_heights),
+            time_delta=time_delta,
+        )
+
+    def _update_sphere_wall_collision(
+        self,
+        sphere_center: jax.Array,
+        sphere_velocities: jax.Array,
+        sphere_radius: jax.Array,
+        sphere_restitution: float,
+    ) -> tuple[jax.Array, jax.Array]:
         sphere_touching_north_wall = (
-            sphere_center[:, 2] + spheres.radius > self._tank_size[1]
+            sphere_center[:, 2] + sphere_radius > self._tank_size[1]
         )
         sphere_touching_south_wall = (
-            sphere_center[:, 2] - spheres.radius < -self._tank_size[1]
+            sphere_center[:, 2] - sphere_radius < -self._tank_size[1]
         )
         sphere_touching_west_wall = (
-            sphere_center[:, 0] + spheres.radius > self._tank_size[0]
+            sphere_center[:, 0] + sphere_radius > self._tank_size[0]
         )
         sphere_touching_east_wall = (
-            sphere_center[:, 0] - spheres.radius < -self._tank_size[0]
+            sphere_center[:, 0] - sphere_radius < -self._tank_size[0]
         )
 
         sphere_center = sphere_center.at[:, 2].set(
             jnp.where(
                 sphere_touching_north_wall,
-                self._tank_size[1] - spheres.radius,
+                self._tank_size[1] - sphere_radius,
                 sphere_center[:, 2],
             )
         )
@@ -191,7 +234,7 @@ class Simulator:
         sphere_center = sphere_center.at[:, 2].set(
             jnp.where(
                 sphere_touching_south_wall,
-                -self._tank_size[1] + spheres.radius,
+                -self._tank_size[1] + sphere_radius,
                 sphere_center[:, 2],
             )
         )
@@ -205,7 +248,7 @@ class Simulator:
         sphere_center = sphere_center.at[:, 0].set(
             jnp.where(
                 sphere_touching_west_wall,
-                self._tank_size[0] - spheres.radius,
+                self._tank_size[0] - sphere_radius,
                 sphere_center[:, 0],
             )
         )
@@ -219,7 +262,7 @@ class Simulator:
         sphere_center = sphere_center.at[:, 0].set(
             jnp.where(
                 sphere_touching_east_wall,
-                -self._tank_size[0] + spheres.radius,
+                -self._tank_size[0] + sphere_radius,
                 sphere_center[:, 0],
             )
         )
@@ -230,20 +273,29 @@ class Simulator:
                 sphere_velocities[:, 0],
             )
         )
+        return sphere_center, sphere_velocities
 
+    def _calculate_spherical_collision_correction_updates(
+        self,
+        sphere_center: jax.Array,
+        sphere_velocities: jax.Array,
+        sphere_radius: jax.Array,
+        sphere_mass: jax.Array,
+        sphere_restitution: float,
+    ) -> tuple[jax.Array, jax.Array]:
         pairwise_subtract = jax.vmap(
             jax.vmap(jnp.subtract, (None, 0), 0),
             (0, None),
             0,
         )
 
-        centroid_directions = -1.0 * pairwise_subtract(spheres.center, spheres.center)
+        centroid_directions = -1.0 * pairwise_subtract(sphere_center, sphere_center)
 
         centroid_distances = jnp.linalg.norm(centroid_directions, axis=2)
 
         pairwise_add = jax.vmap(jax.vmap(jnp.add, (None, 0), 0), (0, None), 0)
 
-        added_radii = pairwise_add(spheres.radius, spheres.radius)
+        added_radii = pairwise_add(sphere_radius, sphere_radius)
 
         intersection_mask = centroid_distances < added_radii
         intersection_mask = intersection_mask.at[jnp.diag_indices(self._n_spheres)].set(
@@ -258,7 +310,7 @@ class Simulator:
 
         collision_direction *= intersection_mask[:, :, None]
 
-        sphere_center += jnp.sum(
+        position_correction = jnp.sum(
             collision_direction * -1.0 * jnp.expand_dims(correction, 2),
             axis=1,
         )
@@ -298,16 +350,4 @@ class Simulator:
             axis=1,
         )
 
-        sphere_velocities += collision_correction_velocities
-
-        # Now let us add the behaviour between the sphere and the walls.
-        return State(
-            time=state.time + time_delta,
-            sphere_centers=sphere_center,
-            water_heights=jnp.ravel(water_heights),
-            sphere_velocities=sphere_velocities,
-            water_velocities=jnp.ravel(water_velocities),
-            wave_speed=wave_speed,
-            body_heights=jnp.ravel(body_heights),
-            time_delta=time_delta,
-        )
+        return position_correction, collision_correction_velocities
