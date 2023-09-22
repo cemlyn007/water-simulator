@@ -4,6 +4,8 @@ from OpenGL.GL import shaders
 import numpy as np
 import glm
 from meshes import geometry
+import jax
+import jax.numpy as jnp
 
 
 class Water:
@@ -16,11 +18,15 @@ class Water:
         )
         self._n_vertices = len(vertices)
         vertex_data = []
+        normal_data = []
         for vertex, normal in zip(vertices, normals):
             vertex_data.extend(vertex)
-            vertex_data.extend(normal)
+            normal_data.extend(normal)
+        self._xz = np.array(vertex_data, dtype=np.float32)
         vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
+        normal_data = glm.array(np.array(normal_data, dtype=np.float32))
 
+        self._normal_vbo = self._init_normal_vbo(normal_data)
         self._vbo = self._init_vbo(vertex_data)
         self._indices = glm.array(indices, dtype=glm.uint32)
         self._ebo = self._init_ebo(self._indices)
@@ -30,11 +36,16 @@ class Water:
         self._vao = self._init_vao(
             self._vbo,
             self._height_vbo,
+            self._normal_vbo,
             self._ebo,
         )
 
         self._shader = self._init_shader(self._vao)
         glBindVertexArray(0)
+
+        self._vertex_normal_updater = jax.jit(
+            WaterVertexNormalUpdater(n, m, self._xz, self._indices)
+        )
 
     def _init_vbo(self, vertex_data: glm.array) -> GLint:
         vbo = glGenBuffers(1)
@@ -66,6 +77,21 @@ class Water:
             raise exception
         return vbo
 
+    def _init_normal_vbo(self, normal_data: glm.array) -> GLint:
+        vbo = glGenBuffers(1)
+        try:
+            glBindBuffer(GL_ARRAY_BUFFER, vbo)
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                glm.sizeof(normal_data),
+                normal_data.ptr,
+                GL_DYNAMIC_DRAW,
+            )
+        except Exception as exception:
+            glDeleteBuffers(1, vbo)
+            raise exception
+        return vbo
+
     def _init_ebo(self, indices: glm.array) -> GLint:
         self._len_ebo = len(indices)
         ebo = glGenBuffers(1)
@@ -86,6 +112,7 @@ class Water:
         self,
         vbo: GLint,
         height_vbo: GLint,
+        normal_vbo: GLint,
         ebo: GLint,
     ) -> GLint:
         vao = glGenVertexArrays(1)
@@ -100,19 +127,19 @@ class Water:
                 2,
                 GL_FLOAT,
                 GL_FALSE,
-                5 * np.float32(0.0).itemsize,
-                ctypes.c_void_p(0),
+                2 * np.float32(0.0).itemsize,
+                None,
             )
             glEnableVertexAttribArray(0)
 
-            # Contains normals.
+            glBindBuffer(GL_ARRAY_BUFFER, normal_vbo)
             glVertexAttribPointer(
                 1,
                 3,
                 GL_FLOAT,
                 GL_FALSE,
-                5 * np.float32(0.0).itemsize,
-                ctypes.c_void_p(2 * np.float32(0.0).itemsize),
+                3 * np.float32(0.0).itemsize,
+                None,
             )
             glEnableVertexAttribArray(1)
 
@@ -228,6 +255,17 @@ class Water:
             water_heights.ptr,
         )
 
+        np_water_heights = np.array(water_heights)
+        arr = self._vertex_normal_updater(np_water_heights)
+        water_normals = glm.array(np.asarray(arr))
+        glBindBuffer(GL_ARRAY_BUFFER, self._normal_vbo)
+        glBufferSubData(
+            GL_ARRAY_BUFFER,
+            0,
+            glm.sizeof(water_normals),
+            water_normals.ptr,
+        )
+
     def draw(self) -> None:
         glUseProgram(self._shader)
         glBindVertexArray(self._vao)
@@ -238,4 +276,71 @@ class Water:
         glDeleteVertexArrays(1, self._vao)
         glDeleteBuffers(1, self._height_vbo)
         glDeleteBuffers(1, self._vbo)
+        glDeleteBuffers(1, self._normal_vbo)
         glDeleteBuffers(1, self._ebo)
+
+
+class WaterVertexNormalUpdater:
+    def __init__(self, n: int, m: int, xz: jax.Array, indices: jax.Array) -> None:
+        self._n = n
+        self._m = m
+        self._n_faces = (self._n - 1) * (self._m - 1) * 2
+        self._xz = jnp.reshape(xz, (self._n * self._m, 2))
+        self._indices = jnp.array(indices)
+        (
+            self._element_index_map,
+            self._face_indices,
+            self._vertex_normal_groups_size,
+        ) = self._prepare()
+
+    def __call__(self, water_heights: jax.Array) -> jax.Array:
+        return self._compute(water_heights)
+
+    def _prepare(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        vertex_normal_groups_size = np.zeros((self._n * self._m,), dtype=np.int32)
+        element_index_map = np.zeros((self._n_faces * 3,), dtype=np.int32)
+        face_indices = self._indices.reshape(self._n_faces, 3)
+
+        for i, vertex_index in enumerate(self._indices):
+            element_index_map[i] = vertex_normal_groups_size[vertex_index]
+            vertex_normal_groups_size[vertex_index] += 1
+
+        return (
+            element_index_map.reshape(-1, 3),
+            face_indices,
+            vertex_normal_groups_size,
+        )
+
+    def _compute(self, water_heights: jax.Array) -> jax.Array:
+        face_normals = self._calculate_face_normals(water_heights)
+        vertex_normal_groups = self._vertex_face_normals(face_normals)
+        vertex_normals = jnp.divide(
+            jnp.sum(vertex_normal_groups, axis=1),
+            self._vertex_normal_groups_size[:, None],
+        )
+        return vertex_normals.flatten()
+
+    def _vertex_face_normals(self, face_normals: jax.Array) -> jax.Array:
+        vertex_normal_groups = jnp.zeros(
+            (self._n * self._m, max(self._vertex_normal_groups_size), 3),
+            dtype=jnp.float32,
+        )
+        vertex_normal_groups = vertex_normal_groups.at[
+            self._face_indices, self._element_index_map
+        ].set(face_normals[:, None, :])
+        return vertex_normal_groups
+
+    def _calculate_face_normals(self, water_heights: jax.Array) -> jax.Array:
+        faces_vertices = jnp.empty((self._n_faces, 3, 3), dtype=jnp.float32)
+        faces_vertices = faces_vertices.at[:, :, jnp.array([0, 2])].set(
+            self._xz[self._face_indices]
+        )
+        faces_vertices = faces_vertices.at[:, :, 1].set(
+            water_heights[self._face_indices]
+        )
+        normals = jnp.cross(
+            faces_vertices[:, 1, :] - faces_vertices[:, 0, :],
+            faces_vertices[:, 2, :] - faces_vertices[:, 0, :],
+        )
+        normals /= jnp.linalg.norm(normals, axis=1, keepdims=True)
+        return normals
