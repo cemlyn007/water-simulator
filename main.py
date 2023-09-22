@@ -487,9 +487,6 @@ class App:
                         intersection_distance,
                     ) = current_selected_entity
                     if selected_entity_type == "spheres":
-                        sphere_center = simulator_state.sphere_centers[
-                            selected_entity_index
-                        ]
                         pos = (
                             jax_camera_position
                             + (ray_direction / jnp.linalg.norm(ray_direction))
@@ -503,23 +500,27 @@ class App:
                                 != previous_selected_entity[:2]
                             )
                         ):
+                            selected_sphere_center = simulator_state.sphere_centers[
+                                selected_entity_index
+                            ]
                             grab_position = pos
-                            sphere_velocity = jnp.zeros((3,), dtype=self._jax_float)
+                            selected_sphere_velocity = jnp.zeros(
+                                (3,), dtype=self._jax_float
+                            )
                         else:
-                            sphere_velocity = (
+                            selected_sphere_velocity = (
                                 pos - grab_position
-                            ) * intersection_distance
+                            ) / time_delta
+                            selected_sphere_center = pos
                             grab_position = pos
-
-                        sphere_center += sphere_velocity * time_delta
 
                         simulator_state = simulator_state._replace(
                             sphere_centers=simulator_state.sphere_centers.at[
                                 selected_entity_index
-                            ].set(sphere_center),
+                            ].set(selected_sphere_center),
                             sphere_velocities=simulator_state.sphere_velocities.at[
                                 selected_entity_index
-                            ].set(sphere_velocity),
+                            ].set(selected_sphere_velocity),
                         )
 
                 simulator_state = self._simulator.simulate(simulator_state, time_delta)
