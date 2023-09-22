@@ -168,7 +168,12 @@ class Simulator:
             indices_are_sorted=True,
             unique_indices=True,
         )
+        sphere_velocities += time_delta * jnp.array(
+            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
+        )
         sphere_velocities *= 0.975
+
+        sphere_center = spheres.center + time_delta * sphere_velocities
 
         body_heights = jnp.sum(body_heights, axis=0)
         body_heights = jnp.reshape(body_heights, (self._n, self._m))
@@ -214,12 +219,6 @@ class Simulator:
         water_velocities *= velocity_damping
         water_heights += time_delta * water_velocities
 
-        # Now let us add some behaviour to the sphere.
-        sphere_velocities += time_delta * jnp.array(
-            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
-        )
-
-        sphere_center = spheres.center + time_delta * sphere_velocities
         return (
             sphere_center,
             sphere_velocities,
