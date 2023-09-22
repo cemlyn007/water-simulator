@@ -446,13 +446,7 @@ class App:
 
                 cursor_position = self.current_cursor_position
                 previous_selected_entity = current_selected_entity
-                if (
-                    glfw.get_mouse_button(window, glfw.MOUSE_BUTTON_LEFT)
-                    and cursor_position.x > 0
-                    and cursor_position.x < self._width
-                    and cursor_position.y > 0
-                    and cursor_position.y < self._height
-                ):
+                if glfw.get_mouse_button(window, glfw.MOUSE_BUTTON_LEFT):
                     ray_direction = self._get_cursor_ray(
                         cursor_position, projection, view
                     )
