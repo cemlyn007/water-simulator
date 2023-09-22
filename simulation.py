@@ -163,9 +163,10 @@ class Simulator:
 
         forces = -body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         force = jnp.sum(forces, axis=-1)
+        acceleration = force / sphere_mass
 
         sphere_velocities = state.sphere_velocities.at[:, 1].set(
-            state.sphere_velocities[:, 1] + time_delta * force / sphere_mass,
+            state.sphere_velocities[:, 1] + time_delta * acceleration,
             indices_are_sorted=True,
             unique_indices=True,
         )
