@@ -575,7 +575,12 @@ class App:
 
 
 if __name__ == "__main__":
-    n = 101
+    import argparse
+
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument("--n", type=int, default=101)
+    args = argument_parser.parse_args()
+    n = args.n
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02, 0.5)
     app.render_until()
