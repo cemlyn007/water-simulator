@@ -138,8 +138,7 @@ class Simulator:
     ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         spheres = self._spheres._replace(center=state.sphere_centers)
         # Now let us handle the behaviour between the sphere and the water.
-
-        r2 = jnp.sum(
+        sphere_grid_distance_squared = jnp.sum(
             jnp.square(
                 self._grid_xz[None, :, :]
                 - spheres.center[:, jnp.array([0, 2])][:, None, :]
@@ -147,8 +146,14 @@ class Simulator:
             axis=-1,
         )
 
-        collision_mask = r2 < jnp.square(spheres.radius[:, None])
-        body_half_heights = jnp.sqrt(jnp.square(spheres.radius[:, None]) - r2)
+        sphere_radius_squared = jnp.square(spheres.radius)
+        collision_mask = sphere_grid_distance_squared < sphere_radius_squared[:, None]
+        body_half_heights_squared = (
+            sphere_radius_squared[:, None] - sphere_grid_distance_squared
+        )
+        body_half_heights_squared = jnp.maximum(body_half_heights_squared, 0.0)
+        body_half_heights = jnp.sqrt(body_half_heights_squared)
+
         min_body = jnp.maximum(spheres.center[:, [1]] - body_half_heights, 0.0)
         max_body = jnp.minimum(
             spheres.center[:, [1]] + body_half_heights, state.water_heights[None, :]
