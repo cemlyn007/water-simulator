@@ -46,9 +46,6 @@ class App:
 
         self._jax_float = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
 
-        self._rectanguloids = []
-        self._init_rectanguloids()
-
         self._spheres = [
             collisions.Sphere(
                 np.array([-0.5, 1.0, -0.5], dtype=np.float32),
@@ -71,41 +68,32 @@ class App:
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 1.0),
         ]
+        grid_field = self._create_grid_field()
         self._simulator = simulation.Simulator(
             [jax.tree_map(self._jax_float, sphere) for sphere in self._spheres],
-            self._rectanguloids,
+            grid_field,
             self._n,
             self._m,
             cube_width,
         )
 
-    def _init_rectanguloids(self) -> None:
-        x_tick_diff = self._cube_width
-        z_tick_diff = self._cube_width
-
-        x_ticks = np.arange(0.0, self._n, dtype=np.float64) * self._cube_width
-        z_ticks = np.arange(0.0, self._m, dtype=np.float64) * self._cube_width
-
-        translate = np.array(
-            [(self._n * self._cube_width) / 2, 0.0, (self._m * self._cube_width) / 2],
-            dtype=np.float64,
+    def _create_grid_field(self) -> np.ndarray:
+        x_ticks = (
+            np.linspace(0.0, self._n, num=self._n, endpoint=True) * self._cube_width
+            - ((self._n - 1) * self._cube_width) / 2.0
         )
-        for x_tick in x_ticks:
-            for z_tick in z_ticks:
-                corner0 = np.array([x_tick, 0.0, z_tick], dtype=np.float64) - translate
-                corner1 = (
-                    np.array(
-                        [x_tick + x_tick_diff, 0.8, z_tick + z_tick_diff],
-                        dtype=np.float64,
-                    )
-                    - translate
-                )
-                self._rectanguloids.append(
-                    collisions.Rectanguloid(
-                        jnp.array(corner0, dtype=self._jax_float),
-                        jnp.array(corner1, dtype=self._jax_float),
-                    )
-                )
+        z_ticks = (
+            np.linspace(0.0, self._m, num=self._m, endpoint=True) * self._cube_width
+            - ((self._m - 1) * self._cube_width) / 2.0
+        )
+
+        x = np.tile(x_ticks, (len(z_ticks), 1))
+        z = np.tile(z_ticks, (len(x_ticks), 1))
+        y = np.empty_like(x)
+        y.fill(0.8)
+
+        grid_field = np.stack((x.T, y, z), axis=-1)
+        return grid_field
 
     def framebuffer_size_callback(self, window, width, height):
         self._framebuffer_size_changed = True
@@ -587,7 +575,7 @@ class App:
 
 
 if __name__ == "__main__":
-    n = 100
+    n = 101
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02, 0.5)
     app.render_until()

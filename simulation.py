@@ -3,6 +3,7 @@ from typing import Sequence
 import jax
 import jax.numpy as jnp
 import typing
+import numpy as np
 
 
 class State(typing.NamedTuple):
@@ -25,31 +26,34 @@ class Simulator:
     def __init__(
         self,
         spheres: Sequence[collisions.Sphere],
-        rectanguloids: Sequence[collisions.Rectanguloid],
+        grid_field: np.ndarray,
         n: int,
         m: int,
         spacing: float,
+        dtype: jnp.dtype = jnp.float32,
     ) -> None:
         self._n_spheres = len(spheres)
         self._spheres = jax.tree_map(lambda *x: jnp.stack(x), *spheres)
-        self._stacked_rectanguloid = jax.tree_map(
-            lambda *x: jnp.stack(x), *rectanguloids
-        )
-        self.update = jax.jit(self.update, inline=True)
         self._n = n
         self._m = m
-        self._tank_size = (jnp.array([n, m], dtype=jnp.float32) * spacing) * 0.5
+        self._dtype = dtype
         self._spacing = spacing
+        self._grid_xz = grid_field[:, :, (0, 2)].reshape((self._n * self._m, 2))
+        self._grid_init_y = grid_field[:, :, 1].flatten()
+        self._tank_size = (
+            jnp.array([self._n, self._m], dtype=self._dtype) * spacing
+        ) * 0.5
+        self.update = jax.jit(self.update, inline=True)
 
     def init_state(self) -> State:
         return State(
             time=0.0,
             sphere_centers=self._spheres.center,
-            water_heights=self._stacked_rectanguloid.corner1[:, 1],
+            water_heights=self._grid_init_y.copy(),
             sphere_velocities=jnp.zeros_like(self._spheres.center),
-            water_velocities=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
+            water_velocities=jnp.zeros((self._n, self._m), dtype=self._dtype),
             wave_speed=2.0,
-            body_heights=jnp.zeros_like(self._stacked_rectanguloid.corner1[:, 1]),
+            body_heights=jnp.zeros((self._n, self._m), dtype=self._dtype),
             time_delta=0.0,
         )
 
@@ -134,14 +138,10 @@ class Simulator:
     ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         spheres = self._spheres._replace(center=state.sphere_centers)
         # Now let us handle the behaviour between the sphere and the water.
-        grid_centers = (
-            self._stacked_rectanguloid.corner0[:, (0, 2)]
-            + self._stacked_rectanguloid.corner1[:, (0, 2)]
-        ) / 2.0
 
         r2 = jnp.sum(
             jnp.square(
-                grid_centers[None, :, :]
+                self._grid_xz[None, :, :]
                 - spheres.center[:, jnp.array([0, 2])][:, None, :]
             ),
             axis=-1,

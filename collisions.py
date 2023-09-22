@@ -83,31 +83,3 @@ def collide_sphere_with_bounded_plane(
         intersection,
         jnp.array([jnp.nan, jnp.nan, jnp.nan], dtype=jnp.float32),
     )
-
-
-def collide_sphere_rectanguloid(
-    sphere: Sphere, rectanguloid: Rectanguloid
-) -> jax.Array:
-    rectanguloid_faces = rectanguloid.get_faces()
-    intersections = jnp.tile(
-        jnp.where(
-            (
-                (rectanguloid.corner0 <= sphere.center)
-                & (sphere.center <= rectanguloid.corner1)
-            ).all(),
-            sphere.center,
-            jnp.array([jnp.nan, jnp.nan, jnp.nan], dtype=jnp.float32),
-        ),
-        (len(rectanguloid_faces), 1),
-    )
-    face_intersections = jax.vmap(collide_sphere_with_bounded_plane, in_axes=(None, 0))(
-        sphere, rectanguloid_faces
-    )
-    face_intersection_mask = jnp.reshape(
-        jnp.any(~jnp.isnan(face_intersections), axis=1), (-1, 1)
-    )
-    return jnp.where(
-        face_intersection_mask,
-        face_intersections,
-        intersections,
-    )
