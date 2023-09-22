@@ -160,7 +160,9 @@ class Simulator:
         force = jnp.sum(forces, axis=-1)
 
         sphere_velocities = state.sphere_velocities.at[:, 1].set(
-            state.sphere_velocities[:, 1] + time_delta * force / sphere_mass
+            state.sphere_velocities[:, 1] + time_delta * force / sphere_mass,
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities *= 0.975
 
@@ -233,14 +235,18 @@ class Simulator:
         sphere_touching_floor = sphere_center[:, 1] < sphere_radius
 
         sphere_center = sphere_center.at[:, 1].set(
-            jnp.where(sphere_touching_floor, sphere_radius, sphere_center[:, 1])
+            jnp.where(sphere_touching_floor, sphere_radius, sphere_center[:, 1]),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities = sphere_velocities.at[:, 1].set(
             jnp.where(
                 sphere_touching_floor,
                 -sphere_restitution * sphere_velocities[:, 1],
                 sphere_velocities[:, 1],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         return sphere_center, sphere_velocities
 
@@ -269,56 +275,72 @@ class Simulator:
                 sphere_touching_north_wall,
                 self._tank_size[1] - sphere_radius,
                 sphere_center[:, 2],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities = sphere_velocities.at[:, 2].set(
             jnp.where(
                 sphere_touching_north_wall,
                 -sphere_restitution * sphere_velocities[:, 2],
                 sphere_velocities[:, 2],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_center = sphere_center.at[:, 2].set(
             jnp.where(
                 sphere_touching_south_wall,
                 -self._tank_size[1] + sphere_radius,
                 sphere_center[:, 2],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities = sphere_velocities.at[:, 2].set(
             jnp.where(
                 sphere_touching_south_wall,
                 -sphere_restitution * sphere_velocities[:, 2],
                 sphere_velocities[:, 2],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_center = sphere_center.at[:, 0].set(
             jnp.where(
                 sphere_touching_west_wall,
                 self._tank_size[0] - sphere_radius,
                 sphere_center[:, 0],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities = sphere_velocities.at[:, 0].set(
             jnp.where(
                 sphere_touching_west_wall,
                 -sphere_restitution * sphere_velocities[:, 0],
                 sphere_velocities[:, 0],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_center = sphere_center.at[:, 0].set(
             jnp.where(
                 sphere_touching_east_wall,
                 -self._tank_size[0] + sphere_radius,
                 sphere_center[:, 0],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         sphere_velocities = sphere_velocities.at[:, 0].set(
             jnp.where(
                 sphere_touching_east_wall,
                 -sphere_restitution * sphere_velocities[:, 0],
                 sphere_velocities[:, 0],
-            )
+            ),
+            indices_are_sorted=True,
+            unique_indices=True,
         )
         return sphere_center, sphere_velocities
 
@@ -346,13 +368,20 @@ class Simulator:
 
         intersection_mask = centroid_distances < added_radii
         intersection_mask = intersection_mask.at[jnp.diag_indices(self._n_spheres)].set(
-            False
+            False,
+            indices_are_sorted=True,
+            unique_indices=True,
         )
 
         correction = (added_radii - centroid_distances) / 2.0
 
         collision_direction = centroid_directions / jnp.expand_dims(
-            centroid_distances.at[jnp.diag_indices(self._n_spheres)].set(1.0), 2
+            centroid_distances.at[jnp.diag_indices(self._n_spheres)].set(
+                1.0,
+                indices_are_sorted=True,
+                unique_indices=True,
+            ),
+            2,
         )
 
         collision_direction *= intersection_mask[:, :, None]
