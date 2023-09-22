@@ -327,16 +327,16 @@ class WaterVertexNormalUpdater:
         )
         vertex_normal_groups = vertex_normal_groups.at[
             self._face_indices, self._element_index_map
-        ].set(face_normals[:, None, :])
+        ].set(face_normals[:, None, :], unique_indices=True)
         return vertex_normal_groups
 
     def _calculate_face_normals(self, water_heights: jax.Array) -> jax.Array:
         faces_vertices = jnp.empty((self._n_faces, 3, 3), dtype=jnp.float32)
         faces_vertices = faces_vertices.at[:, :, jnp.array([0, 2])].set(
-            self._xz[self._face_indices]
+            self._xz[self._face_indices], unique_indices=True
         )
         faces_vertices = faces_vertices.at[:, :, 1].set(
-            water_heights[self._face_indices]
+            water_heights[self._face_indices], unique_indices=True
         )
         normals = jnp.cross(
             faces_vertices[:, 1, :] - faces_vertices[:, 0, :],
