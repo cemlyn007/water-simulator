@@ -45,7 +45,7 @@ class Simulator:
         ) * 0.5
         # JAX Metal backend does not support scipy convolve2d.
         if jax.default_backend() in ["METAL"]:
-            self._vmap_smooth = jax.vmap(self._smooth)
+            self._vmap_smooth = self._smooth
         else:
             self._vmap_smooth = jax.vmap(self._scipy_smooth)
         self.update = jax.jit(self.update, inline=True)
@@ -484,23 +484,19 @@ class Simulator:
             )
         return single_sphere_body_height
 
-    def _smooth(self, single_sphere_body_height: jax.Array) -> jax.Array:
+    def _smooth(self, sphere_body_height: jax.Array) -> jax.Array:
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
-        single_sphere_body_height = single_sphere_body_height[
-            jnp.newaxis, :, :, jnp.newaxis
-        ]
-        single_sphere_body_height = jnp.transpose(
-            single_sphere_body_height, [0, 3, 1, 2]
-        )
-        kernel = jnp.ones((3, 3), dtype=single_sphere_body_height.dtype) / 9.0
+        sphere_body_height = sphere_body_height[:, :, :, jnp.newaxis]
+        sphere_body_height = jnp.transpose(sphere_body_height, [0, 3, 1, 2])
+        kernel = jnp.ones((3, 3), dtype=sphere_body_height.dtype) / 9.0
         kernel = kernel[:, :, jnp.newaxis, jnp.newaxis]
         kernel = jnp.transpose(kernel, [3, 2, 0, 1])
         for _ in range(2):
-            assert single_sphere_body_height.shape == (1, 1, self._n, self._m)
-            single_sphere_body_height = jax.lax.conv(
-                single_sphere_body_height,
+            assert sphere_body_height.shape == (self._n_spheres, 1, self._n, self._m)
+            sphere_body_height = jax.lax.conv(
+                sphere_body_height,
                 kernel,
                 (1, 1),
                 "SAME",
             )
-        return single_sphere_body_height[0, 0, :, :]
+        return sphere_body_height[:, 0, :, :]
