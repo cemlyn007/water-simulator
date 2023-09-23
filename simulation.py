@@ -43,8 +43,10 @@ class Simulator:
         self._tank_size = (
             jnp.array([self._n, self._m], dtype=self._dtype) * spacing
         ) * 0.5
+
+        self._jax_backend = jax.default_backend()
         # JAX Metal backend does not support scipy convolve2d.
-        if jax.default_backend() in ["METAL"]:
+        if self._jax_backend in ["METAL"]:
             self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
         else:
             self._smooth_sphere_body_heights = jax.vmap(
@@ -258,11 +260,46 @@ class Simulator:
         force = jnp.sum(forces, axis=-1)
         acceleration = force / sphere_mass
 
-        sphere_velocities = state.sphere_velocities.at[:, 1].set(
-            state.sphere_velocities[:, 1] + time_delta * acceleration,
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
+        sphere_y_velocity_increment = time_delta * acceleration
+
+        # JAX METAL does not support at[] correctly.
+        if self._jax_backend in ["METAL"]:
+            sphere_velocities = state.sphere_velocities + jnp.concatenate(
+                [
+                    jnp.zeros(
+                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
+                    ),
+                    jnp.expand_dims(sphere_y_velocity_increment, 1),
+                    jnp.zeros(
+                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
+                    ),
+                ],
+                axis=1,
+            )
+            sphere_velocities = state.sphere_velocities + jnp.concatenate(
+                [
+                    jnp.zeros(
+                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
+                    ),
+                    jnp.expand_dims(sphere_y_velocity_increment, 1),
+                    jnp.zeros(
+                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
+                    ),
+                ],
+                axis=1,
+            )
+        else:
+            sphere_velocities = state.sphere_velocities.at[:, 1].set(
+                state.sphere_velocities[:, 1] + time_delta * acceleration,
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = state.sphere_velocities.at[:, 1].set(
+                state.sphere_velocities[:, 1] + time_delta * acceleration,
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+
         sphere_velocities += time_delta * jnp.array(
             [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
         )
@@ -279,21 +316,43 @@ class Simulator:
         sphere_restitution: float,
     ) -> tuple[jax.Array, jax.Array]:
         sphere_touching_floor = sphere_center[:, 1] < sphere_radius
-
-        sphere_center = sphere_center.at[:, 1].set(
-            jnp.where(sphere_touching_floor, sphere_radius, sphere_center[:, 1]),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities = sphere_velocities.at[:, 1].set(
-            jnp.where(
-                sphere_touching_floor,
-                -sphere_restitution * sphere_velocities[:, 1],
-                sphere_velocities[:, 1],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
+        # JAX METAL does not support at[] correctly.
+        if self._jax_backend in ["METAL"]:
+            sphere_center = jnp.concatenate(
+                [
+                    sphere_center[:, 0, jnp.newaxis],
+                    jnp.maximum(sphere_radius, sphere_center[:, 1])[:, jnp.newaxis],
+                    sphere_center[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+            sphere_velocities = jnp.concatenate(
+                [
+                    sphere_velocities[:, 0, jnp.newaxis],
+                    jnp.where(
+                        sphere_touching_floor,
+                        -sphere_restitution * sphere_velocities[:, 1],
+                        sphere_velocities[:, 1],
+                    )[:, jnp.newaxis],
+                    sphere_velocities[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+        else:
+            sphere_center = sphere_center.at[:, 1].set(
+                jnp.where(sphere_touching_floor, sphere_radius, sphere_center[:, 1]),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = sphere_velocities.at[:, 1].set(
+                jnp.where(
+                    sphere_touching_floor,
+                    -sphere_restitution * sphere_velocities[:, 1],
+                    sphere_velocities[:, 1],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
         return sphere_center, sphere_velocities
 
     def _update_sphere_wall_collision(
@@ -316,78 +375,180 @@ class Simulator:
             sphere_center[:, 0] - sphere_radius < -self._tank_size[0]
         )
 
-        sphere_center = sphere_center.at[:, 2].set(
-            jnp.where(
-                sphere_touching_north_wall,
-                self._tank_size[1] - sphere_radius,
-                sphere_center[:, 2],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities = sphere_velocities.at[:, 2].set(
-            jnp.where(
-                sphere_touching_north_wall,
-                -sphere_restitution * sphere_velocities[:, 2],
-                sphere_velocities[:, 2],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_center = sphere_center.at[:, 2].set(
-            jnp.where(
-                sphere_touching_south_wall,
-                -self._tank_size[1] + sphere_radius,
-                sphere_center[:, 2],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities = sphere_velocities.at[:, 2].set(
-            jnp.where(
-                sphere_touching_south_wall,
-                -sphere_restitution * sphere_velocities[:, 2],
-                sphere_velocities[:, 2],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_center = sphere_center.at[:, 0].set(
-            jnp.where(
-                sphere_touching_west_wall,
-                self._tank_size[0] - sphere_radius,
-                sphere_center[:, 0],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities = sphere_velocities.at[:, 0].set(
-            jnp.where(
-                sphere_touching_west_wall,
-                -sphere_restitution * sphere_velocities[:, 0],
-                sphere_velocities[:, 0],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_center = sphere_center.at[:, 0].set(
-            jnp.where(
-                sphere_touching_east_wall,
-                -self._tank_size[0] + sphere_radius,
-                sphere_center[:, 0],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities = sphere_velocities.at[:, 0].set(
-            jnp.where(
-                sphere_touching_east_wall,
-                -sphere_restitution * sphere_velocities[:, 0],
-                sphere_velocities[:, 0],
-            ),
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
+        # JAX METAL does not support at[] correctly.
+        if self._jax_backend in ["METAL"]:
+            sphere_center = jnp.concatenate(
+                [
+                    sphere_center[:, 0, jnp.newaxis],
+                    sphere_center[:, 1, jnp.newaxis],
+                    jnp.where(
+                        sphere_touching_north_wall,
+                        self._tank_size[1] - sphere_radius,
+                        sphere_center[:, 2],
+                    )[:, jnp.newaxis],
+                ],
+                axis=1,
+            )
+            sphere_velocities = jnp.concatenate(
+                [
+                    sphere_velocities[:, 0, jnp.newaxis],
+                    sphere_velocities[:, 1, jnp.newaxis],
+                    jnp.where(
+                        sphere_touching_north_wall,
+                        -sphere_restitution * sphere_velocities[:, 2],
+                        sphere_velocities[:, 2],
+                    )[:, jnp.newaxis],
+                ],
+                axis=1,
+            )
+
+            sphere_center = jnp.concatenate(
+                [
+                    sphere_center[:, 0, jnp.newaxis],
+                    sphere_center[:, 1, jnp.newaxis],
+                    jnp.where(
+                        sphere_touching_south_wall,
+                        -self._tank_size[1] + sphere_radius,
+                        sphere_center[:, 2],
+                    )[:, jnp.newaxis],
+                ],
+                axis=1,
+            )
+            sphere_velocities = jnp.concatenate(
+                [
+                    sphere_velocities[:, 0, jnp.newaxis],
+                    sphere_velocities[:, 1, jnp.newaxis],
+                    jnp.where(
+                        sphere_touching_south_wall,
+                        -sphere_restitution * sphere_velocities[:, 2],
+                        sphere_velocities[:, 2],
+                    )[:, jnp.newaxis],
+                ],
+                axis=1,
+            )
+
+            sphere_center = jnp.concatenate(
+                [
+                    jnp.where(
+                        sphere_touching_west_wall,
+                        self._tank_size[0] - sphere_radius,
+                        sphere_center[:, 0],
+                    )[:, jnp.newaxis],
+                    sphere_center[:, 1, jnp.newaxis],
+                    sphere_center[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+            sphere_velocities = jnp.concatenate(
+                [
+                    jnp.where(
+                        sphere_touching_west_wall,
+                        -sphere_restitution * sphere_velocities[:, 0],
+                        sphere_velocities[:, 0],
+                    )[:, jnp.newaxis],
+                    sphere_velocities[:, 1, jnp.newaxis],
+                    sphere_velocities[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+
+            sphere_center = jnp.concatenate(
+                [
+                    jnp.where(
+                        sphere_touching_east_wall,
+                        -self._tank_size[0] + sphere_radius,
+                        sphere_center[:, 0],
+                    )[:, jnp.newaxis],
+                    sphere_center[:, 1, jnp.newaxis],
+                    sphere_center[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+            sphere_velocities = jnp.concatenate(
+                [
+                    jnp.where(
+                        sphere_touching_east_wall,
+                        -sphere_restitution * sphere_velocities[:, 0],
+                        sphere_velocities[:, 0],
+                    )[:, jnp.newaxis],
+                    sphere_velocities[:, 1, jnp.newaxis],
+                    sphere_velocities[:, 2, jnp.newaxis],
+                ],
+                axis=1,
+            )
+        else:
+            sphere_center = sphere_center.at[:, 2].set(
+                jnp.where(
+                    sphere_touching_north_wall,
+                    self._tank_size[1] - sphere_radius,
+                    sphere_center[:, 2],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = sphere_velocities.at[:, 2].set(
+                jnp.where(
+                    sphere_touching_north_wall,
+                    -sphere_restitution * sphere_velocities[:, 2],
+                    sphere_velocities[:, 2],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_center = sphere_center.at[:, 2].set(
+                jnp.where(
+                    sphere_touching_south_wall,
+                    -self._tank_size[1] + sphere_radius,
+                    sphere_center[:, 2],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = sphere_velocities.at[:, 2].set(
+                jnp.where(
+                    sphere_touching_south_wall,
+                    -sphere_restitution * sphere_velocities[:, 2],
+                    sphere_velocities[:, 2],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_center = sphere_center.at[:, 0].set(
+                jnp.where(
+                    sphere_touching_west_wall,
+                    self._tank_size[0] - sphere_radius,
+                    sphere_center[:, 0],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = sphere_velocities.at[:, 0].set(
+                jnp.where(
+                    sphere_touching_west_wall,
+                    -sphere_restitution * sphere_velocities[:, 0],
+                    sphere_velocities[:, 0],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_center = sphere_center.at[:, 0].set(
+                jnp.where(
+                    sphere_touching_east_wall,
+                    -self._tank_size[0] + sphere_radius,
+                    sphere_center[:, 0],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
+            sphere_velocities = sphere_velocities.at[:, 0].set(
+                jnp.where(
+                    sphere_touching_east_wall,
+                    -sphere_restitution * sphere_velocities[:, 0],
+                    sphere_velocities[:, 0],
+                ),
+                indices_are_sorted=True,
+                unique_indices=True,
+            )
         return sphere_center, sphere_velocities
 
     def _calculate_spherical_collision_correction_updates(
@@ -502,5 +663,6 @@ class Simulator:
                 kernel,
                 (1, 1),
                 "SAME",
+                precision="highest",
             )
         return sphere_body_height[:, 0, :, :]
