@@ -181,7 +181,9 @@ class Simulator:
         body_half_heights_squared = jnp.maximum(body_half_heights_squared, 0.0)
         body_half_heights = jnp.sqrt(body_half_heights_squared)
 
-        min_body = jnp.maximum(spheres.center[:, [1]] - body_half_heights, 0.0)
+        # We do not need to do a max clamp of 0.0 because we know the sphere height is
+        # always above 0.
+        min_body = spheres.center[:, [1]] - body_half_heights
         max_body = jnp.minimum(
             spheres.center[:, [1]] + body_half_heights, state.water_heights[None, :]
         )
