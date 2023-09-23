@@ -171,6 +171,31 @@ class Simulator:
                 precision="highest",
             )
 
+        (
+            water_heights,
+            water_velocities,
+            wave_speed,
+        ) = self._update_water_by_body_height(state, time_delta, body_heights)
+
+        sphere_center, sphere_velocities = self._update_sphere_by_body_height(
+            state, time_delta, spheres, sphere_mass, sphere_body_heights
+        )
+
+        return (
+            sphere_center,
+            sphere_velocities,
+            water_heights,
+            body_heights,
+            water_velocities,
+            wave_speed,
+        )
+
+    def _update_water_by_body_height(
+        self,
+        state: State,
+        time_delta: float,
+        body_heights: jax.Array,
+    ) -> tuple[jax.Array, jax.Array, jax.Array]:
         previous_body_heights = jnp.reshape(state.body_heights, (self._n, self._m))
         water_heights = jnp.reshape(state.water_heights, (self._n, self._m))
         body_change = body_heights - previous_body_heights
@@ -202,16 +227,8 @@ class Simulator:
 
         water_heights += (0.25 * sums - water_heights) * positional_damping
         water_heights += time_delta * water_velocities
-
-        sphere_center, sphere_velocities = self._update_sphere_by_body_height(
-            state, time_delta, spheres, sphere_mass, sphere_body_heights
-        )
-
         return (
-            sphere_center,
-            sphere_velocities,
             water_heights,
-            body_heights,
             water_velocities,
             wave_speed,
         )
