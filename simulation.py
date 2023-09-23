@@ -203,6 +203,27 @@ class Simulator:
         water_heights += (0.25 * sums - water_heights) * positional_damping
         water_heights += time_delta * water_velocities
 
+        sphere_center, sphere_velocities = self._update_sphere_by_body_height(
+            state, time_delta, spheres, sphere_mass, sphere_body_heights
+        )
+
+        return (
+            sphere_center,
+            sphere_velocities,
+            water_heights,
+            body_heights,
+            water_velocities,
+            wave_speed,
+        )
+
+    def _update_sphere_by_body_height(
+        self,
+        state: State,
+        time_delta: float,
+        spheres: collisions.Sphere,
+        sphere_mass: jax.Array,
+        sphere_body_heights: jax.Array,
+    ) -> tuple[jax.Array, jax.Array]:
         forces = (
             -sphere_body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         )
@@ -220,15 +241,7 @@ class Simulator:
         sphere_velocities *= 0.999
 
         sphere_center = spheres.center + time_delta * sphere_velocities
-
-        return (
-            sphere_center,
-            sphere_velocities,
-            water_heights,
-            body_heights,
-            water_velocities,
-            wave_speed,
-        )
+        return sphere_center, sphere_velocities
 
     def _update_sphere_floor_collision(
         self,
