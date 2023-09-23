@@ -347,6 +347,7 @@ class App:
             smoothing = 0.1
             time_delta = 1 / 60.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
+            previous_left_button_pressed = False
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
             ):
@@ -434,7 +435,7 @@ class App:
 
                 cursor_position = self.current_cursor_position
                 previous_selected_entity = current_selected_entity
-                if glfw.get_mouse_button(window, glfw.MOUSE_BUTTON_LEFT):
+                if self.left_button_pressed:
                     ray_direction = self._get_cursor_ray(
                         cursor_position, projection, view
                     )
@@ -445,7 +446,10 @@ class App:
                         dtype=self._jax_float,
                     )
 
-                    if current_selected_entity is None:
+                    if (
+                        not previous_left_button_pressed
+                        and current_selected_entity is None
+                    ):
                         for sphere_index, sphere in enumerate(self._spheres):
                             raycaster.grouped_objects["spheres"][
                                 sphere_index
@@ -462,11 +466,8 @@ class App:
                                 flush=True,
                             )
 
-                if current_selected_entity and not glfw.get_mouse_button(
-                    window, glfw.MOUSE_BUTTON_LEFT
-                ):
+                if current_selected_entity and not self.left_button_pressed:
                     current_selected_entity = None
-
                 time_delta = min(1.0 / 60.0, 2.0 * time_delta)
                 if current_selected_entity:
                     (
@@ -549,6 +550,7 @@ class App:
                 water.draw()
 
                 glfw.swap_buffers(window)
+                previous_left_button_pressed = self.left_button_pressed
                 glfw.poll_events()
                 end = glfw.get_time()
                 time_delta = end - start
