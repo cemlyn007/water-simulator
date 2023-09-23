@@ -214,9 +214,9 @@ class Simulator:
             precision="highest",
         )
         water_velocities += time_delta * c * (sums - 4.0 * water_heights)
-        water_heights += (0.25 * sums - water_heights) * positional_damping
-
         water_velocities *= velocity_damping
+
+        water_heights += (0.25 * sums - water_heights) * positional_damping
         water_heights += time_delta * water_velocities
 
         return (
