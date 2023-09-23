@@ -157,25 +157,9 @@ class Simulator:
         max_body = jnp.minimum(
             spheres.center[:, [1]] + body_half_heights, state.water_heights[None, :]
         )
-        body_heights = jnp.maximum(max_body - min_body, 0.0)
+        sphere_body_heights = jnp.maximum(max_body - min_body, 0.0)
 
-        forces = -body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
-        force = jnp.sum(forces, axis=-1)
-        acceleration = force / sphere_mass
-
-        sphere_velocities = state.sphere_velocities.at[:, 1].set(
-            state.sphere_velocities[:, 1] + time_delta * acceleration,
-            indices_are_sorted=True,
-            unique_indices=True,
-        )
-        sphere_velocities += time_delta * jnp.array(
-            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
-        )
-        sphere_velocities *= 0.975
-
-        sphere_center = spheres.center + time_delta * sphere_velocities
-
-        body_heights = jnp.sum(body_heights, axis=0)
+        body_heights = jnp.sum(sphere_body_heights, axis=0)
         body_heights = jnp.reshape(body_heights, (self._n, self._m))
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
         for _ in range(2):
@@ -218,6 +202,24 @@ class Simulator:
 
         water_heights += (0.25 * sums - water_heights) * positional_damping
         water_heights += time_delta * water_velocities
+
+        forces = (
+            -sphere_body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
+        )
+        force = jnp.sum(forces, axis=-1)
+        acceleration = force / sphere_mass
+
+        sphere_velocities = state.sphere_velocities.at[:, 1].set(
+            state.sphere_velocities[:, 1] + time_delta * acceleration,
+            indices_are_sorted=True,
+            unique_indices=True,
+        )
+        sphere_velocities += time_delta * jnp.array(
+            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
+        )
+        sphere_velocities *= 0.999
+
+        sphere_center = spheres.center + time_delta * sphere_velocities
 
         return (
             sphere_center,
