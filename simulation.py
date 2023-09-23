@@ -45,9 +45,11 @@ class Simulator:
         ) * 0.5
         # JAX Metal backend does not support scipy convolve2d.
         if jax.default_backend() in ["METAL"]:
-            self._vmap_smooth = self._smooth
+            self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
         else:
-            self._vmap_smooth = jax.vmap(self._scipy_smooth)
+            self._smooth_sphere_body_heights = jax.vmap(
+                self._scipy_smooth_sphere_body_height
+            )
         self.update = jax.jit(self.update, inline=True)
 
     def init_state(self) -> State:
@@ -196,7 +198,7 @@ class Simulator:
         sphere_body_heights = jnp.reshape(
             sphere_body_heights, (self._n_spheres, self._n, self._m)
         )
-        sphere_body_heights = self._vmap_smooth(sphere_body_heights)
+        sphere_body_heights = self._smooth_sphere_body_heights(sphere_body_heights)
         return sphere_body_heights
 
     def _update_water_by_body_height(
@@ -472,7 +474,9 @@ class Simulator:
 
         return position_correction, collision_correction_velocities
 
-    def _scipy_smooth(self, single_sphere_body_height: jax.Array) -> jax.Array:
+    def _scipy_smooth_sphere_body_height(
+        self, single_sphere_body_height: jax.Array
+    ) -> jax.Array:
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
         for _ in range(2):
             padded_body_heights = jnp.pad(single_sphere_body_height, 1, mode="constant")
@@ -484,7 +488,7 @@ class Simulator:
             )
         return single_sphere_body_height
 
-    def _smooth(self, sphere_body_height: jax.Array) -> jax.Array:
+    def _smooth_sphere_body_heights(self, sphere_body_height: jax.Array) -> jax.Array:
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
         sphere_body_height = sphere_body_height[:, :, :, jnp.newaxis]
         sphere_body_height = jnp.transpose(sphere_body_height, [0, 3, 1, 2])
