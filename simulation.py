@@ -43,6 +43,7 @@ class Simulator:
         self._tank_size = (
             jnp.array([self._n, self._m], dtype=self._dtype) * spacing
         ) * 0.5
+        self._vmap_smooth = jax.vmap(self._smooth)
         self.update = jax.jit(self.update, inline=True)
 
     def init_state(self) -> State:
@@ -137,6 +138,33 @@ class Simulator:
         sphere_mass: jax.Array,
     ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         spheres = self._spheres._replace(center=state.sphere_centers)
+
+        sphere_body_heights = self._get_sphere_body_heights(state, spheres)
+
+        body_heights = jnp.sum(sphere_body_heights, axis=0)
+        (
+            water_heights,
+            water_velocities,
+            wave_speed,
+        ) = self._update_water_by_body_height(state, time_delta, body_heights)
+
+        sphere_body_heights = jnp.reshape(sphere_body_heights, (self._n_spheres, -1))
+        sphere_center, sphere_velocities = self._update_sphere_by_body_height(
+            state, time_delta, spheres, sphere_mass, sphere_body_heights
+        )
+
+        return (
+            sphere_center,
+            sphere_velocities,
+            water_heights,
+            body_heights,
+            water_velocities,
+            wave_speed,
+        )
+
+    def _get_sphere_body_heights(
+        self, state: State, spheres: collisions.Sphere
+    ) -> jax.Array:
         # Now let us handle the behaviour between the sphere and the water.
         sphere_grid_distance_squared = jnp.sum(
             jnp.square(
@@ -159,36 +187,11 @@ class Simulator:
         )
         sphere_body_heights = jnp.maximum(max_body - min_body, 0.0)
 
-        body_heights = jnp.sum(sphere_body_heights, axis=0)
-        body_heights = jnp.reshape(body_heights, (self._n, self._m))
-        # Smooth the body heights field to reduce the amount of spikes and instabilities.
-        for _ in range(2):
-            padded_body_heights = jnp.pad(body_heights, 1, mode="constant")
-            body_heights = jax.scipy.signal.convolve2d(
-                padded_body_heights,
-                jnp.ones((3, 3), dtype=body_heights.dtype) / 9.0,
-                mode="valid",
-                precision="highest",
-            )
-
-        (
-            water_heights,
-            water_velocities,
-            wave_speed,
-        ) = self._update_water_by_body_height(state, time_delta, body_heights)
-
-        sphere_center, sphere_velocities = self._update_sphere_by_body_height(
-            state, time_delta, spheres, sphere_mass, sphere_body_heights
+        sphere_body_heights = jnp.reshape(
+            sphere_body_heights, (self._n_spheres, self._n, self._m)
         )
-
-        return (
-            sphere_center,
-            sphere_velocities,
-            water_heights,
-            body_heights,
-            water_velocities,
-            wave_speed,
-        )
+        sphere_body_heights = self._vmap_smooth(sphere_body_heights)
+        return sphere_body_heights
 
     def _update_water_by_body_height(
         self,
@@ -462,3 +465,15 @@ class Simulator:
         )
 
         return position_correction, collision_correction_velocities
+
+    def _smooth(self, single_sphere_body_height: jax.Array) -> jax.Array:
+        # Smooth the body heights field to reduce the amount of spikes and instabilities.
+        for _ in range(2):
+            padded_body_heights = jnp.pad(single_sphere_body_height, 1, mode="constant")
+            single_sphere_body_height = jax.scipy.signal.convolve2d(
+                padded_body_heights,
+                jnp.ones((3, 3), dtype=single_sphere_body_height.dtype) / 9.0,
+                mode="valid",
+                precision="highest",
+            )
+        return single_sphere_body_height
