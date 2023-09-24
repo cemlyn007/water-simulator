@@ -275,24 +275,7 @@ class Simulator:
                 ],
                 axis=1,
             )
-            sphere_velocities = state.sphere_velocities + jnp.concatenate(
-                [
-                    jnp.zeros(
-                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
-                    ),
-                    jnp.expand_dims(sphere_y_velocity_increment, 1),
-                    jnp.zeros(
-                        (self._n_spheres, 1), dtype=state.sphere_velocities.dtype
-                    ),
-                ],
-                axis=1,
-            )
         else:
-            sphere_velocities = state.sphere_velocities.at[:, 1].set(
-                state.sphere_velocities[:, 1] + time_delta * acceleration,
-                indices_are_sorted=True,
-                unique_indices=True,
-            )
             sphere_velocities = state.sphere_velocities.at[:, 1].set(
                 state.sphere_velocities[:, 1] + time_delta * acceleration,
                 indices_are_sorted=True,
