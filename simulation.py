@@ -156,7 +156,6 @@ class Simulator:
             wave_speed,
         ) = self._update_water_by_body_height(state, time_delta, body_heights)
 
-        sphere_body_heights = jnp.reshape(sphere_body_heights, (self._n_spheres, -1))
         sphere_center, sphere_velocities = self._update_sphere_by_body_height(
             state, time_delta, spheres, sphere_mass, sphere_body_heights
         )
@@ -257,7 +256,7 @@ class Simulator:
         forces = (
             -sphere_body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         )
-        force = jnp.sum(forces, axis=-1)
+        force = jnp.sum(forces, axis=(1, 2))
         acceleration = force / sphere_mass
 
         sphere_y_velocity_increment = time_delta * acceleration
