@@ -302,7 +302,9 @@ class Simulator:
         sphere_velocities += time_delta * jnp.array(
             [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
         )
-        sphere_velocities *= 0.98
+        sphere_velocities *= jnp.where(
+            jnp.any(sphere_body_heights > 0.0, axis=(1, 2))[:, jnp.newaxis], 0.93, 1.0
+        )
 
         sphere_center = spheres.center + time_delta * sphere_velocities
         return sphere_center, sphere_velocities
