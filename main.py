@@ -36,9 +36,6 @@ class App:
         self.last_cursor_position = glm.vec2(0.0, 0.0)
         self.current_scroll_offset = glm.vec2(0.0, 0.0)
         self.left_button_pressed = False
-        self._can_update_model = threading.Event()
-        self._update_model = threading.Event()
-        self._terminate = threading.Event()
         self._model_y = np.zeros(self._instances, dtype=np.float32)
         self._model_y_a = np.zeros(self._instances, dtype=np.float32)
         self._model_y_b = np.zeros(self._instances, dtype=np.float32)
@@ -557,8 +554,6 @@ class App:
                 print(f"[GL] Time Delta: {time_delta*1000.:.2f}ms")
         finally:
             print("[GL] Terminating", flush=True)
-            self._can_update_model.set()
-            self._terminate.set()
             glfw.terminate()
 
     def _get_cursor_ray(
