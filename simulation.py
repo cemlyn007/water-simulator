@@ -257,7 +257,7 @@ class Simulator:
             -sphere_body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         )
         force = jnp.sum(forces, axis=(1, 2))
-        acceleration = force / sphere_mass
+        acceleration = force / sphere_mass + self.GRAVITY_CONSTANT
 
         sphere_y_velocity_increment = time_delta * acceleration
 
@@ -282,9 +282,6 @@ class Simulator:
                 unique_indices=True,
             )
 
-        sphere_velocities += time_delta * jnp.array(
-            [0.0, self.GRAVITY_CONSTANT, 0.0], dtype=sphere_velocities.dtype
-        )
         sphere_velocities *= jnp.where(
             jnp.any(sphere_body_heights > 0.0, axis=(1, 2))[:, jnp.newaxis], 0.93, 1.0
         )
