@@ -9,4 +9,4 @@ The main differences:
 * Uses JAX so simulator code can run on CPU, GPU, METAL and TPU (TPU untested)
 * Uses pure OpenGL with no external libraries
 
-This application has been tested with Python 3.10 on CPU and METAL GPU on MacOS. It should work on any platform that supports `JAX` and `OpenGL`. On my MacBook Pro (M1) it runs at 280fps with 101x101 grid when using JAX CPU.
+This application has been tested with Python 3.10 on CPU and METAL GPU on MacOS. It should work on any platform that supports `JAX` and `OpenGL`. On my MacBook Pro (M1) it runs at 350fps with 101x101 grid when using JAX CPU.
