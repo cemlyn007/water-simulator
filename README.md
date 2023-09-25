@@ -1,6 +1,6 @@
 # JAX OpenGL Height-Field Water Simulator
 
-![Simulation](images/simulation.jpeg)
+[![Simulation YouTube Video](images/simulation.jpeg)](https://youtu.be/Vrl7CklleO4?si=gBdu8EDwAdmfNjJm)
 
 This is a simple height-field water simulator written in Python using `JAX` and `OpenGL`. It is based on the awesome work of [Matthias](https://www.youtube.com/watch?v=hswBi5wcqAA) which was implemented using `three.js`.
 
