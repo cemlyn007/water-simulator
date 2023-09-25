@@ -185,8 +185,18 @@ class App:
             balls = [meshes.Ball(sphere.radius.item()) for sphere in self._spheres]
             light_position = glm.vec3(1.2, 4.0, 2.0)
 
-            camera_position = glm.vec3(3.0, 7.0, 3.0)
-            camera_radians = glm.vec2(0.0, 0.0)
+            camera_position = glm.normalize(glm.vec3(3.0, 7.0, 3.0))
+            camera_radians = glm.vec2(
+                math.atan(camera_position.z / camera_position.x),
+                math.atan(camera_position.y / camera_position.x),
+            )
+            camera_position = glm.vec3(
+                *update_orbit_camera_position(
+                    camera_radians[0],
+                    camera_radians[1],
+                    5.0,
+                )
+            )
 
             view = glm.lookAt(
                 camera_position,
