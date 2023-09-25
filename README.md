@@ -10,3 +10,14 @@ The main differences:
 * Uses pure OpenGL with no external libraries
 
 This application has been tested with Python 3.10 on CPU and METAL GPU on MacOS. It should work on any platform that supports `JAX` and `OpenGL`. On my MacBook Pro (M1) it runs at 350fps with 101x101 grid when using JAX CPU.
+
+## Run Instructions
+First make sure you have Python.
+```
+git clone https://github.com/cemlyn007/water-simulator
+cd water-simulator
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python main.py --n 101
+```
