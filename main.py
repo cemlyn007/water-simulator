@@ -3,7 +3,6 @@ from OpenGL.GL import *
 import sys
 import numpy as np
 import glm
-import threading
 import math
 import meshes
 import textures
@@ -24,21 +23,14 @@ def update_orbit_camera_position(
 
 
 class App:
-    def __init__(
-        self, n: int, m: int, cube_width: float, wall_thickness: float
-    ) -> None:
+    def __init__(self, n: int, m: int, cube_width: float) -> None:
         self._n = n
         self._m = m
         self._cube_width = cube_width
-        self._wall_thickness = wall_thickness
-        self._instances = n * m
         self.current_cursor_position = glm.vec2(0.0, 0.0)
         self.last_cursor_position = glm.vec2(0.0, 0.0)
         self.current_scroll_offset = glm.vec2(0.0, 0.0)
         self.left_button_pressed = False
-        self._model_y = np.zeros(self._instances, dtype=np.float32)
-        self._model_y_a = np.zeros(self._instances, dtype=np.float32)
-        self._model_y_b = np.zeros(self._instances, dtype=np.float32)
         self._framebuffer_size_changed = False
 
         self._jax_float = jnp.float64 if jax.config.jax_enable_x64 else jnp.float32
@@ -513,7 +505,9 @@ class App:
 
                 previous_selected_entity = current_selected_entity
                 sphere_center = simulator_state.sphere_centers
-                self._model_y[:] = simulator_state.water_heights
+                water_heights = np.asarray(
+                    simulator_state.water_heights, dtype=np.float32
+                )
 
                 for i in range(len(self._spheres)):
                     self._spheres[i] = self._spheres[i]._replace(
@@ -524,7 +518,7 @@ class App:
                     )
                     balls[i].set_model(sphere_model)
 
-                water.set_water_heights(glm.array(self._model_y))
+                water.set_water_heights(glm.array(water_heights))
 
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
@@ -579,5 +573,5 @@ if __name__ == "__main__":
     args = argument_parser.parse_args()
     n = args.n
     print(f"Using {n*n} instances", flush=True)
-    app = App(n, n, 0.02, 0.5)
+    app = App(n, n, 0.02)
     app.render_until()
