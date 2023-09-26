@@ -128,8 +128,8 @@ class App:
                 self._framebuffer_width_size = self._width * 2
                 self._framebuffer_height_size = self._height * 2
             else:
-                self._framebuffer_width_size = width
-                self._framebuffer_height_size = height
+                self._framebuffer_width_size = self._width
+                self._framebuffer_height_size = self._height
 
             window = glfw.create_window(
                 self._width,
