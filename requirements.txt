@@ -1,3 +1,4 @@
+glfw==2.6.2
 jax==0.4.16
 PyOpenGL==3.1.7
 PyOpenGL-accelerate==3.1.7
