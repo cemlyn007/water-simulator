@@ -343,5 +343,5 @@ class WaterVertexNormalUpdater:
             faces_vertices[:, 1, :] - faces_vertices[:, 0, :],
             faces_vertices[:, 2, :] - faces_vertices[:, 0, :],
         )
-        normals /= jnp.linalg.norm(normals, axis=1, keepdims=True)
+        normals /= jnp.linalg.norm(normals, axis=1)[:, None]
         return normals
