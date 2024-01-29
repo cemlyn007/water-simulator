@@ -577,8 +577,12 @@ class App:
 
 
 def main():
-    argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument("--n", type=int, default=101)
+    argument_parser = argparse.ArgumentParser(
+        description="Water Simulator implemented using JAX and OpenGL."
+    )
+    argument_parser.add_argument(
+        "--n", type=int, default=101, help="number of cubes in the x and z axis"
+    )
     args = argument_parser.parse_args()
     n = args.n
     print(f"Using {n*n} instances", flush=True)
