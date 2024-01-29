@@ -1,4 +1,4 @@
-import raycasting
+from water_simulator import raycasting
 import jax.numpy as jnp
 import jax
 

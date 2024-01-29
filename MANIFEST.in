@@ -1,0 +1,2 @@
+include water_simulator/shaders/*.fs
+include water_simulator/shaders/*.vs

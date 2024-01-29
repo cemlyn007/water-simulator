@@ -1,4 +1,4 @@
-import collisions
+from water_simulator import collisions
 from typing import Sequence
 import jax
 import jax.numpy as jnp

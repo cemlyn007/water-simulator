@@ -15,10 +15,6 @@ On a Linux x86_64 machine with a NVIDIA 1080, I was also able to achieve ~350fps
 ## Run Instructions
 First make sure you have Python. You may want to change how you install JAX so that you can run on CPU, GPU or METAL GPU. By default I have assumed you want to run the simulator code CPU which is easiest and fastest.
 ```
-git clone https://github.com/cemlyn007/water-simulator
-cd water-simulator
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt "jax[cpu]"
-python main.py --n 101
+pip install git+https://github.com/cemlyn007/water-simulator "jax[cpu]"
+water-simulator --n 101
 ```

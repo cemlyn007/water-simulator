@@ -1,9 +1,10 @@
+import os
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
 import numpy as np
 import glm
-from meshes import geometry
+from water_simulator.meshes import geometry
 import jax
 import jax.numpy as jnp
 
@@ -160,13 +161,20 @@ class Water:
         return vao
 
     def _init_shader(self, vao: GLint) -> GLint:
-        with open("shaders/basic_lighting.vs", "r") as file:
+        shaders_directory = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shaders"
+        )
+        vertex_shader_filepath = os.path.join(shaders_directory, "basic_lighting.vs")
+        with open(vertex_shader_filepath, "r") as file:
             vertex_shader_source = file.read()
             light_cube_vertex_shader = shaders.compileShader(
                 vertex_shader_source, GL_VERTEX_SHADER
             )
         try:
-            with open("shaders/basic_lighting.fs", "r") as file:
+            fragment_shader_filepath = os.path.join(
+                shaders_directory, "basic_lighting.fs"
+            )
+            with open(fragment_shader_filepath, "r") as file:
                 fragment_shader_source = file.read()
                 light_cube_fragment_shader = shaders.compileShader(
                     fragment_shader_source, GL_FRAGMENT_SHADER

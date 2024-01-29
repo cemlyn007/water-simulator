@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "water-simulator"
+version = "0.0.0"
+authors = [
+  { name="Cemlyn Neil Waters", email="cemlynwater@gmail.com" },
+]
+description = "App for simulating water"
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+  "glfw==2.6.2",
+  "jax==0.4.16",
+  "PyOpenGL==3.1.7",
+  "PyOpenGL-accelerate==3.1.7",
+  "PyGLM==2.7.0",
+  "numpy==1.24.4",
+]
+
+[tool.setuptools]
+packages = ["water_simulator", "water_simulator.meshes"]
+
+[project.scripts]
+water-simulator = "water_simulator.__main__:main"

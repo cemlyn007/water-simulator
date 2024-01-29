@@ -1,16 +1,17 @@
 import glfw
+import argparse
 from OpenGL.GL import *
 import sys
 import numpy as np
 import glm
 import math
-import meshes
-import textures
-import simulation
-import collisions
+from water_simulator import meshes
+from water_simulator import textures
+from water_simulator import simulation
+from water_simulator import collisions
 import jax.numpy as jnp
 import jax
-import raycasting
+from water_simulator import raycasting
 
 
 def update_orbit_camera_position(
@@ -575,9 +576,7 @@ class App:
         return ray_world
 
 
-if __name__ == "__main__":
-    import argparse
-
+def main():
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument("--n", type=int, default=101)
     args = argument_parser.parse_args()
@@ -585,3 +584,7 @@ if __name__ == "__main__":
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02)
     app.render_until()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

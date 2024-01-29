@@ -1,13 +1,15 @@
+import os
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
 import numpy as np
 import glm
-from meshes import geometry
+from water_simulator.meshes import geometry
 
 
 class Light:
     def __init__(self) -> None:
+        self._shader = None
         vertices, _, indices = geometry.cube_vertices_normals_and_indices()
         vertex_data = glm.array(np.array(vertices, dtype=np.float32))
 
@@ -67,13 +69,18 @@ class Light:
         return vao
 
     def _init_shader(self, vao: GLint) -> GLint:
-        with open("shaders/light_cube.vs", "r") as file:
+        shaders_directory = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shaders"
+        )
+        vertex_shader_filepath = os.path.join(shaders_directory, "light_cube.vs")
+        with open(vertex_shader_filepath, "r") as file:
             vertex_shader_source = file.read()
             light_cube_vertex_shader = shaders.compileShader(
                 vertex_shader_source, GL_VERTEX_SHADER
             )
         try:
-            with open("shaders/light_cube.fs", "r") as file:
+            fragment_shader_filepath = os.path.join(shaders_directory, "light_cube.fs")
+            with open(fragment_shader_filepath, "r") as file:
                 fragment_shader_source = file.read()
                 light_cube_fragment_shader = shaders.compileShader(
                     fragment_shader_source, GL_FRAGMENT_SHADER
@@ -134,7 +141,8 @@ class Light:
         glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, None)
 
     def __del__(self) -> None:
-        glDeleteProgram(self._shader)
+        if self._shader is not None:
+            glDeleteProgram(self._shader)
         glDeleteBuffers(1, self._vbo)
         glDeleteBuffers(1, self._vao)
         glDeleteBuffers(1, self._ebo)

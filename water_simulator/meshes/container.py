@@ -1,78 +1,125 @@
+import os
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
 import numpy as np
 import glm
+from water_simulator.meshes import geometry
 
 
-class Ball:
-    def __init__(self, radius: float) -> None:
-        vertices, indices, normals = self._create_mesh(radius)
-        vertex_data = []
-        for vertex, normal in zip(vertices, normals):
-            vertex_data.extend(vertex)
-            vertex_data.extend(normal)
-        vertex_data = np.array(vertex_data, dtype=np.float32)
+class Container:
+    def __init__(self, size: float, wall_thickness: float) -> None:
+        vertex_data, indices = self._create_mesh(size, wall_thickness)
         self._total_indices = len(indices)
-        self._vbo = self._init_vbo(glm.array(vertex_data))
-        self._ebo = self._init_ebo(glm.array(indices))
+        self._vbo = self._init_vbo(vertex_data)
+        self._ebo = self._init_ebo(indices)
         self._vao = self._init_vao(self._vbo, self._ebo)
         self._shader = self._init_shader(self._vao)
         glUseProgram(0)
         glBindVertexArray(0)
 
-    def _create_mesh(self, radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        sectors = 36
-        stacks = 18
+    def _create_mesh(
+        self, size: float, wall_thickness: float
+    ) -> tuple[glm.array, glm.array]:
+        (
+            cube_vertices,
+            cube_normals,
+            cube_indices,
+        ) = geometry.cube_vertices_normals_and_indices()
+        # Plane
+        vertex_data = (
+            np.float32(size + wall_thickness)
+            * np.array(
+                [
+                    # Bottom left
+                    -1.0,
+                    0.0,
+                    -1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    # Bottom right
+                    1.0,
+                    0.0,
+                    -1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    # Top right
+                    1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    # Top left
+                    -1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                ],
+                dtype=np.float32,
+            )
+        ).tolist()
+        indices = [2, 1, 0, 0, 3, 2]
 
-        # Generate sphere mesh data
-        vertices = []
-        indices = []
-        normals = []
+        height_scale = 1.25
 
-        for i in range(stacks + 1):
-            V = i / stacks
-            phi = V * np.pi
+        wall_length = 2.0 * (size + wall_thickness)
 
-            for j in range(sectors + 1):
-                U = j / sectors
-                theta = U * 2 * np.pi
-
-                x = radius * np.sin(phi) * np.cos(theta)
-                y = radius * np.cos(phi)
-                z = radius * np.sin(phi) * np.sin(theta)
-
-                vertices.append([x, y, z])
-
-                normal = np.array([x, y, z])
-                normal = normal / np.linalg.norm(normal)
-                normals.append(normal)
-
-        for i in range(stacks):
-            for j in range(sectors):
-                first = i * (sectors + 1) + j
-                second = first + sectors + 1
-
-                indices.extend(
-                    [
-                        first + 1,
-                        second,
-                        first,
-                    ]
-                )
-                indices.extend(
-                    [
-                        first + 1,
-                        second + 1,
-                        second,
-                    ]
-                )
-
-        return (
-            np.array(vertices, dtype=np.float32),
-            np.array(indices, dtype=np.uint32),
-            np.array(normals, dtype=np.float32),
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
+        cube_vertices_shaped += np.array(
+            [0.0, height_scale / 2.0, size + wall_thickness / 2.0]
         )
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
+        cube_vertices_shaped += np.array(
+            [0.0, height_scale / 2.0, -size - wall_thickness / 2.0]
+        )
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
+        cube_vertices_shaped += np.array(
+            [size + wall_thickness / 2.0, height_scale / 2.0, 0.0]
+        )
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
+        cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
+        cube_vertices_shaped += np.array(
+            [-size - wall_thickness / 2.0, height_scale / 2.0, 0.0]
+        )
+        cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
+        for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
+            vertex_data.extend(vertices)
+            vertex_data.extend(normals)
+
+        offset = max(indices) + 1
+        for i in range(4):
+            indices.extend(
+                [i * (max(cube_indices) + 1) + index + offset for index in cube_indices]
+            )
+
+        vertex_data = glm.array(
+            np.array(vertex_data, dtype=np.float32), dtype=glm.float32
+        )
+        indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+        return vertex_data, indices
 
     def _init_vbo(self, vertex: glm.array) -> None:
         vbo = glGenBuffers(1)
@@ -82,7 +129,7 @@ class Ball:
                 GL_ARRAY_BUFFER, glm.sizeof(vertex), vertex.ptr, GL_STATIC_DRAW
             )
         except Exception as exception:
-            glDeleteBuffers(1, vbo)
+            glDeleteBuffers(1, self._vbo)
             raise exception
         return vbo
 
@@ -128,13 +175,18 @@ class Ball:
         return vao
 
     def _init_shader(self, vao: GLint) -> GLint:
-        with open("shaders/simple.vs", "r") as file:
+        shaders_directory = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shaders"
+        )
+        vertex_shader_filepath = os.path.join(shaders_directory, "simple.vs")
+        with open(vertex_shader_filepath, "r") as file:
             vertex_shader_source = file.read()
             vertex_shader = shaders.compileShader(
                 vertex_shader_source, GL_VERTEX_SHADER
             )
         try:
-            with open("shaders/simple.fs", "r") as file:
+            fragment_shader_filepath = os.path.join(shaders_directory, "simple.fs")
+            with open(fragment_shader_filepath, "r") as file:
                 fragment_shader_source = file.read()
                 fragment_shader = shaders.compileShader(
                     fragment_shader_source, GL_FRAGMENT_SHADER
