@@ -75,12 +75,13 @@ class App:
         ]
         grid_field = self._create_grid_field()
         self._simulator = simulation.Simulator(
-            [jax.tree_map(self._jax_float, sphere) for sphere in self._spheres],
+            [jax.tree.map(self._jax_float, sphere) for sphere in self._spheres],
             grid_field,
             self._n,
             self._m,
             cube_width,
         )
+        self._simulate = jax.jit(self._simulate, donate_argnums=(0,))
 
     def _create_grid_field(self) -> np.ndarray:
         x_ticks = (
@@ -127,6 +128,12 @@ class App:
     def scroll_callback(self, window, xoffset: float, yoffset: float) -> None:
         self.current_scroll_offset.x = xoffset
         self.current_scroll_offset.y = yoffset
+
+    def _simulate(self, state: simulation.State) -> tuple[simulation.State, jax.Array, jax.Array]:
+        next_state = self._simulator.simulate(state=state)
+        water_vertex_normal_updater = simulation.WaterVertexNormalUpdater(self._n, self._m, self._water.xz, self._water.indices)
+        water_normals = water_vertex_normal_updater(next_state.water_heights)
+        return next_state, next_state.water_heights.astype(jnp.float32), water_normals.astype(jnp.float32)
 
     def render_until(self, elapsed_time: float = float("inf"), max_iterations: int = float('inf')) -> None:
         nvidia_profiler = NvidiaProfiler()
@@ -192,7 +199,7 @@ class App:
             self._background_camera.unbind()
 
             light = meshes.Light()
-            water = meshes.Water(self._n, self._m, self._cube_width)
+            self._water = meshes.Water(self._n, self._m, self._cube_width)
             wall_size = ((max(self._n, self._m) - 1) * self._cube_width) / 2.0
             wall_thickness = self._cube_width * 2
             container = meshes.Container(
@@ -255,13 +262,13 @@ class App:
                 ball.set_view_position(camera_position)
                 ball.set_light_position(light_position)
 
-            water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
-            water.set_texture(self._background_camera.rendered_texture)
+            self._water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+            self._water.set_texture(self._background_camera.rendered_texture)
 
-            water.set_view_position(camera_position)
-            water.set_view(view)
-            water.set_projection(projection)
-            water.set_light_position(light_position)
+            self._water.set_view_position(camera_position)
+            self._water.set_view(view)
+            self._water.set_projection(projection)
+            self._water.set_light_position(light_position)
 
             raycaster = raycasting.Raycaster(
                 {
@@ -432,11 +439,11 @@ class App:
                     for ball in balls:
                         ball.set_view(view)
                     container.set_view(view)
-                    water.set_view(view)
+                    self._water.set_view(view)
                     for ball in balls:
                         ball.set_view_position(camera_position)
                     container.set_view_position(camera_position)
-                    water.set_view_position(camera_position)
+                    self._water.set_view_position(camera_position)
 
                 if self._framebuffer_size_changed:
                     projection = glm.perspective(
@@ -449,7 +456,7 @@ class App:
                     for ball in balls:
                         ball.set_projection(projection)
                     container.set_projection(projection)
-                    water.set_projection(projection)
+                    self._water.set_projection(projection)
                     self._background_camera.resize(
                         self._framebuffer_width_size, self._framebuffer_height_size
                     )
@@ -534,28 +541,25 @@ class App:
                             ].set(selected_sphere_velocity),
                         )
 
-                simulator_state = self._simulator.simulate(simulator_state, time_delta)
+                simulator_state = simulator_state._replace(time_delta=time_delta)
+                simulator_state, water_heights, water_normals = self._simulate(simulator_state)
 
                 previous_selected_entity = current_selected_entity
 
-                # TODO: What is advantage of _spheres being on GPU? Why not keep it on CPU?
-                # sphere_center = jax.device_get(simulator_state.sphere_centers)
-                sphere_center = simulator_state.sphere_centers
-                water_heights = np.asarray(
-                    simulator_state.water_heights, dtype=np.float32
-                )
-                # water_heights = jax.device_get(simulator_state.water_heights).astype(np.float32)
+                sphere_center = jax.device_get(simulator_state.sphere_centers)
+                water_heights = jax.device_get(water_heights)
+                water_normals = jax.device_get(water_normals)
                 for i in range(len(self._spheres)):
                     self._spheres[i] = self._spheres[i]._replace(
                         center=sphere_center[i]
                     )
-                    # TODO: GPU to CPU transfer...
                     sphere_model = glm.translate(
                         glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
                     )
                     balls[i].set_model(sphere_model)
 
-                water.set_water_heights(glm.array(water_heights))
+                self._water.set_water_heights(glm.array(water_heights))
+                self._water.set_water_normals(glm.array(water_normals))
 
                 self._background_camera.bind()
                 glClearColor(0.1, 0.1, 0.1, 1.0)
@@ -575,7 +579,7 @@ class App:
                 container.draw()
                 for ball in balls:
                     ball.draw()
-                water.draw()
+                self._water.draw()
 
                 glfw.swap_buffers(window)
                 previous_left_button_pressed = self.left_button_pressed

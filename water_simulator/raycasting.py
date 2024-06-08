@@ -170,12 +170,12 @@ class Rectanguloid(Object):
                 self.corner1,
             ),
         )
-        intersections = jax.tree_map(
+        intersections = jax.tree.map(
             lambda object: object.intersect(ray),
             bounded_planes,
             is_leaf=lambda o: isinstance(o, BoundedPlane),
         )
-        intersections = jax.tree_map(lambda *xs: jnp.stack(xs), *intersections)
+        intersections = jax.tree.map(lambda *xs: jnp.stack(xs), *intersections)
         return intersections._replace(
             positions=intersections.positions.reshape(len(bounded_planes), 3),
             valid=intersections.valid.reshape(
@@ -242,7 +242,7 @@ class Raycaster:
         objects: tuple[Object, ...],
     ) -> list[Intersections]:
         ray = Ray(camera_position, ray_direction)
-        intersections = jax.tree_map(
+        intersections = jax.tree.map(
             lambda object: object.intersect(ray),
             objects,
             is_leaf=lambda o: isinstance(o, Object),

@@ -33,7 +33,7 @@ class TestRaycasting:
             direction=jnp.array([0.0, -1.0, 0.0]),
         )
         intersections = jax.jit(
-            lambda r: jax.tree_map(
+            lambda r: jax.tree.map(
                 lambda plane: plane.intersect(r),
                 planes,
                 is_leaf=lambda o: isinstance(o, raycasting.Object),
