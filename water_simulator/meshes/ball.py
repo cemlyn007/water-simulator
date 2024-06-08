@@ -2,6 +2,7 @@ import os
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
+import functools
 import numpy as np
 import glm
 
@@ -162,7 +163,7 @@ class Ball:
         self._light_color = light_color
         glUseProgram(self._shader)
         glUniform3f(
-            glGetUniformLocation(self._shader, "lightColor"),
+            self._light_color_uniform_location,
             light_color.x,
             light_color.y,
             light_color.z,
@@ -172,7 +173,7 @@ class Ball:
         self._view_position = view_position
         glUseProgram(self._shader)
         glUniform3f(
-            glGetUniformLocation(self._shader, "viewPos"),
+            self._view_position_uniform_location,
             view_position.x,
             view_position.y,
             view_position.z,
@@ -182,7 +183,7 @@ class Ball:
         self._view = view
         glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._shader, "view"),
+            self._view_uniform_location,
             1,
             GL_FALSE,
             glm.value_ptr(self._view),
@@ -192,7 +193,7 @@ class Ball:
         self._projection = projection
         glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._shader, "projection"),
+            self._projection_uniform_location,
             1,
             GL_FALSE,
             glm.value_ptr(self._projection),
@@ -219,7 +220,7 @@ class Ball:
     def set_model(self, model: glm.mat4) -> None:
         glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._shader, "model"),
+            self._model_location,
             1,
             GL_FALSE,
             glm.value_ptr(model),
@@ -234,3 +235,28 @@ class Ball:
         glDeleteBuffers(1, self._vbo)
         glDeleteBuffers(1, self._ebo)
         glDeleteVertexArrays(1, self._vao)
+
+    @property
+    @functools.cache
+    def _light_color_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "lightColor")
+    
+    @property
+    @functools.cache
+    def _view_position_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "viewPos")
+    
+    @property
+    @functools.cache
+    def _view_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "view")
+    
+    @property
+    @functools.cache
+    def _projection_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "projection")
+    
+    @property
+    @functools.cache
+    def _model_location(self) -> int:
+        return glGetUniformLocation(self._shader, "model")

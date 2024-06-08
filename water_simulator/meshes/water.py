@@ -2,6 +2,7 @@ import os
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
+import functools
 import numpy as np
 import glm
 from water_simulator.meshes import geometry
@@ -199,7 +200,7 @@ class Water:
         self._light_color = light_color
         glUseProgram(self._shader)
         glUniform3f(
-            glGetUniformLocation(self._shader, "lightColor"),
+            self._light_color_uniform_location,
             light_color.x,
             light_color.y,
             light_color.z,
@@ -215,7 +216,7 @@ class Water:
         self._view_position = view_position
         glUseProgram(self._shader)
         glUniform3f(
-            glGetUniformLocation(self._shader, "viewPos"),
+            self._view_position_uniform_location,
             view_position.x,
             view_position.y,
             view_position.z,
@@ -225,7 +226,7 @@ class Water:
         self._view = view
         glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._shader, "view"),
+            self._view_uniform_location,
             1,
             GL_FALSE,
             glm.value_ptr(view),
@@ -235,7 +236,7 @@ class Water:
         self._projection = projection
         glUseProgram(self._shader)
         glUniformMatrix4fv(
-            glGetUniformLocation(self._shader, "projection"),
+            self._projection_uniform_location,
             1,
             GL_FALSE,
             glm.value_ptr(projection),
@@ -292,3 +293,23 @@ class Water:
         glDeleteBuffers(1, self._vbo)
         glDeleteBuffers(1, self._normal_vbo)
         glDeleteBuffers(1, self._ebo)
+
+    @property
+    @functools.cache
+    def _light_color_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "lightColor")
+    
+    @property
+    @functools.cache
+    def _view_position_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "viewPos")
+    
+    @property
+    @functools.cache
+    def _view_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "view")
+    
+    @property
+    @functools.cache
+    def _projection_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "projection")
