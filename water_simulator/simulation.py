@@ -45,16 +45,16 @@ class Simulator:
         ) * 0.5
 
         self._jax_backend = jax.default_backend()
-        # self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
-        # JAX Metal backend does not support scipy convolve2d.
-        if self._jax_backend in ["METAL"]:
-            self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
-        else:
-            self._smooth_sphere_body_heights = jax.vmap(
-                self._scipy_smooth_sphere_body_height
-            )
+        self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
+        # # JAX Metal backend does not support scipy convolve2d.
+        # if self._jax_backend in ["METAL"]:
+        #     self._smooth_sphere_body_heights = self._smooth_sphere_body_heights
+        # else:
+        #     self._smooth_sphere_body_heights = jax.vmap(
+        #         self._scipy_smooth_sphere_body_height
+        #     )
         # TODO: Buffer donation!
-        self.update = jax.jit(self.update, inline=True, donate_argnums=(0,))
+        self.update = jax.jit(self.update, donate_argnums=(0,))
 
     def init_state(self) -> State:
         return State(
