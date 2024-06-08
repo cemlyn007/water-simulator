@@ -135,7 +135,7 @@ class App:
         water_normals = water_vertex_normal_updater(next_state.water_heights)
         return next_state, next_state.water_heights.astype(jnp.float32), water_normals.astype(jnp.float32)
 
-    def render_until(self, elapsed_time: float = float("inf"), max_iterations: int = float('inf')) -> None:
+    def render_until(self, elapsed_time: float = float("inf"), max_iterations: int = float('inf'), enable_profiling: bool = False) -> None:
         nvidia_profiler = NvidiaProfiler()
         try:
             glfw.init()
@@ -372,8 +372,6 @@ class App:
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
             iteration = 0
-            # enable_profiling = True
-            enable_profiling = True # TODO
         
             while (
                 not glfw.window_should_close(window) and glfw.get_time() < elapsed_time and iteration < max_iterations
@@ -546,9 +544,7 @@ class App:
 
                 previous_selected_entity = current_selected_entity
 
-                sphere_center = jax.device_get(simulator_state.sphere_centers)
-                water_heights = jax.device_get(water_heights)
-                water_normals = jax.device_get(water_normals)
+                sphere_center, water_heights, water_normals = jax.device_get((simulator_state.sphere_centers, water_heights, water_normals))
                 for i in range(len(self._spheres)):
                     self._spheres[i] = self._spheres[i]._replace(
                         center=sphere_center[i]
@@ -626,11 +622,14 @@ def main():
     argument_parser.add_argument(
         "--max_iterations", type=int, default=float('inf')
     )
+    argument_parser.add_argument(
+        "--enable_profiling", action="store_true", default=False
+    )
     arguments = argument_parser.parse_args()
     n = arguments.n
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02)
-    app.render_until(max_iterations=arguments.max_iterations)
+    app.render_until(max_iterations=arguments.max_iterations, enable_profiling=arguments.enable_profiling)
 
 
 if __name__ == "__main__":
