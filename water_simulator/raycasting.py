@@ -209,7 +209,7 @@ class Raycaster:
             )
             for group_name, objects in self.grouped_objects.items()
         }
-        results: list[str, int, float] = []
+        results: list[tuple[str, int, jax.Array]] = []
         for group, intersections in group_intersections.items():
             for i, intersection in enumerate(intersections):
                 valid_positions = intersection.positions[intersection.valid]
@@ -218,6 +218,8 @@ class Raycaster:
                         (
                             group,
                             i,
+                            # TODO: You probably don't want to .item immediately.
+                            # Removing so might allow for more parallelism?
                             jnp.min(
                                 jnp.linalg.norm(
                                     camera_position - valid_positions, axis=1
@@ -229,7 +231,9 @@ class Raycaster:
         if len(results) == 0:
             return None
         # else...
-        return min(results, key=lambda x: x[2])
+        group, i, distance = min(results, key=lambda x: x[2])
+        return group, i, distance.item()
+        
 
     def _cast(
         self,

@@ -12,6 +12,21 @@ from water_simulator import collisions
 import jax.numpy as jnp
 import jax
 from water_simulator import raycasting
+from ctypes import cdll
+
+
+class NvidiaProfiler:
+    def __init__(self) -> None:
+        self._libcudart = cdll.LoadLibrary('libcudart.so')
+        self.running = False
+    
+    def start(self) -> None:
+        self._libcudart.cudaProfilerStart()
+        self.running = True
+
+    def stop(self) -> None:
+        self._libcudart.cudaProfilerStop()
+        self.running = False 
 
 
 def update_orbit_camera_position(
@@ -113,7 +128,8 @@ class App:
         self.current_scroll_offset.x = xoffset
         self.current_scroll_offset.y = yoffset
 
-    def render_until(self, elapsed_time: float = float("inf")) -> None:
+    def render_until(self, elapsed_time: float = float("inf"), max_iterations: int = float('inf')) -> None:
+        nvidia_profiler = NvidiaProfiler()
         try:
             glfw.init()
 
@@ -348,8 +364,12 @@ class App:
             time_delta = 1 / 60.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
+            iteration = 0
+            # enable_profiling = True
+            enable_profiling = True # TODO
+        
             while (
-                not glfw.window_should_close(window) and glfw.get_time() < elapsed_time
+                not glfw.window_should_close(window) and glfw.get_time() < elapsed_time and iteration < max_iterations
             ):
                 start = glfw.get_time()
 
@@ -359,6 +379,7 @@ class App:
                 )
 
                 if rotate_camera:
+                    # TODO: Optimise?
                     cursor_position_change = (
                         self.current_cursor_position - self.last_cursor_position
                     )
@@ -378,6 +399,7 @@ class App:
                 )
 
                 if camera_changed:
+                    # TODO: Optimise?
                     camera_radius = (
                         np.linalg.norm(camera_position)
                         + 0.1 * self.current_scroll_offset.y
@@ -515,15 +537,19 @@ class App:
                 simulator_state = self._simulator.simulate(simulator_state, time_delta)
 
                 previous_selected_entity = current_selected_entity
+
+                # TODO: What is advantage of _spheres being on GPU? Why not keep it on CPU?
+                # sphere_center = jax.device_get(simulator_state.sphere_centers)
                 sphere_center = simulator_state.sphere_centers
                 water_heights = np.asarray(
                     simulator_state.water_heights, dtype=np.float32
                 )
-
+                # water_heights = jax.device_get(simulator_state.water_heights).astype(np.float32)
                 for i in range(len(self._spheres)):
                     self._spheres[i] = self._spheres[i]._replace(
                         center=sphere_center[i]
                     )
+                    # TODO: GPU to CPU transfer...
                     sphere_model = glm.translate(
                         glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
                     )
@@ -557,9 +583,19 @@ class App:
                 end = glfw.get_time()
                 time_delta = end - start
                 print(f"[GL] Time Delta: {time_delta*1000.:.2f}ms")
+
+                if enable_profiling and iteration == 2:
+                    # nvidia_profiler.start()
+                    jax.profiler.start_trace("/tmp/jax-trace", create_perfetto_link=True)
+                iteration += 1
         finally:
             print("[GL] Terminating", flush=True)
             glfw.terminate()
+
+            jax.profiler.stop_trace()
+
+            # if nvidia_profiler.running:
+            #     nvidia_profiler.stop()
 
     def _get_cursor_ray(
         self, cursor_position: glm.vec2, projection: glm.mat4, view: glm.mat4
@@ -583,11 +619,14 @@ def main():
     argument_parser.add_argument(
         "--n", type=int, default=101, help="number of cubes in the x and z axis"
     )
-    args = argument_parser.parse_args()
-    n = args.n
+    argument_parser.add_argument(
+        "--max_iterations", type=int, default=float('inf')
+    )
+    arguments = argument_parser.parse_args()
+    n = arguments.n
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02)
-    app.render_until()
+    app.render_until(max_iterations=arguments.max_iterations)
 
 
 if __name__ == "__main__":

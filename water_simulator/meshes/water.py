@@ -44,6 +44,7 @@ class Water:
         self._shader = self._init_shader(self._vao)
         glBindVertexArray(0)
 
+        # TODO: Maybe buffer donation?
         self._vertex_normal_updater = jax.jit(
             WaterVertexNormalUpdater(n, m, self._xz, self._indices)
         )
@@ -263,9 +264,10 @@ class Water:
             water_heights.ptr,
         )
 
-        np_water_heights = np.array(water_heights)
+        np_water_heights = np.asarray(water_heights)
         arr = self._vertex_normal_updater(np_water_heights)
-        water_normals = glm.array(np.asarray(arr))
+        # water_normals = glm.array(np.asarray(arr))
+        water_normals = glm.array(jax.device_get(arr))
         glBindBuffer(GL_ARRAY_BUFFER, self._normal_vbo)
         glBufferSubData(
             GL_ARRAY_BUFFER,
