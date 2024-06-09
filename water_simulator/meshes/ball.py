@@ -1,10 +1,10 @@
+import functools
 import os
+
+import glm
+import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
-
-import functools
-import numpy as np
-import glm
 
 
 class Ball:
@@ -217,13 +217,13 @@ class Ball:
             glm.value_ptr(color),
         )
 
-    def set_model(self, model: glm.mat4) -> None:
+    def set_model(self, model: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._model_location,
             1,
             GL_FALSE,
-            glm.value_ptr(model),
+            model,
         )
 
     def draw(self) -> None:
@@ -240,22 +240,22 @@ class Ball:
     @functools.cache
     def _light_color_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "lightColor")
-    
+
     @property
     @functools.cache
     def _view_position_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "viewPos")
-    
+
     @property
     @functools.cache
     def _view_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "view")
-    
+
     @property
     @functools.cache
     def _projection_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "projection")
-    
+
     @property
     @functools.cache
     def _model_location(self) -> int:

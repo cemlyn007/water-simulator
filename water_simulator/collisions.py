@@ -1,6 +1,7 @@
 import typing
-import jax.numpy as jnp
+
 import jax
+import jax.numpy as jnp
 
 
 class Sphere(typing.NamedTuple):

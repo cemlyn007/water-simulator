@@ -1,9 +1,10 @@
 import os
+
+import glm
+import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
-import numpy as np
-import glm
 from water_simulator.meshes import geometry
 
 

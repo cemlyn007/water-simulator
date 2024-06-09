@@ -1,32 +1,32 @@
-import glfw
 import argparse
-from OpenGL.GL import *
-import sys
-import numpy as np
-import glm
+import contextlib
+import ctypes
 import math
-from water_simulator import meshes
-from water_simulator import textures
-from water_simulator import simulation
-from water_simulator import collisions
-import jax.numpy as jnp
+import sys
+import time
+
+import glfw
+import glm
 import jax
-from water_simulator import raycasting
-from ctypes import cdll
+import jax.numpy as jnp
+import numpy as np
+from OpenGL.GL import *
+
+from water_simulator import collisions, meshes, raycasting, simulation, textures
 
 
 class NvidiaProfiler:
     def __init__(self) -> None:
-        self._libcudart = cdll.LoadLibrary('libcudart.so')
+        self._libcudart = ctypes.cdll.LoadLibrary("libcudart.so")
         self.running = False
-    
+
     def start(self) -> None:
         self._libcudart.cudaProfilerStart()
         self.running = True
 
     def stop(self) -> None:
         self._libcudart.cudaProfilerStop()
-        self.running = False 
+        self.running = False
 
 
 def update_orbit_camera_position(
@@ -81,7 +81,7 @@ class App:
             self._m,
             cube_width,
         )
-        self._simulate = jax.jit(self._simulate, donate_argnums=(0,))
+        self._jit_simulate = jax.jit(self._simulate, donate_argnums=(0,))
 
     def _create_grid_field(self) -> np.ndarray:
         x_ticks = (
@@ -129,13 +129,29 @@ class App:
         self.current_scroll_offset.x = xoffset
         self.current_scroll_offset.y = yoffset
 
-    def _simulate(self, state: simulation.State) -> tuple[simulation.State, jax.Array, jax.Array]:
+    def _simulate(
+        self,
+        state: simulation.State,
+    ) -> tuple[simulation.State, jax.Array, jax.Array, jax.Array]:
         next_state = self._simulator.simulate(state=state)
-        water_vertex_normal_updater = simulation.WaterVertexNormalUpdater(self._n, self._m, self._water.xz, self._water.indices)
+        water_vertex_normal_updater = simulation.WaterVertexNormalUpdater(
+            self._n, self._m, self._water.xz, self._water.indices
+        )
         water_normals = water_vertex_normal_updater(next_state.water_heights)
-        return next_state, next_state.water_heights.astype(jnp.float32), water_normals.astype(jnp.float32)
+        sphere_models = self._get_sphere_models(next_state.sphere_centers)
+        return (
+            next_state,
+            next_state.water_heights.astype(jnp.float32),
+            water_normals.astype(jnp.float32),
+            sphere_models,
+        )
 
-    def render_until(self, elapsed_time: float = float("inf"), max_iterations: int = float('inf'), enable_profiling: bool = False) -> None:
+    def render_until(
+        self,
+        elapsed_time: float = float("inf"),
+        max_iterations: int = float("inf"),
+        enable_profiling: bool = False,
+    ) -> None:
         nvidia_profiler = NvidiaProfiler()
         try:
             glfw.init()
@@ -256,7 +272,11 @@ class App:
                 ball.set_projection(projection)
                 ball.set_color(glm.vec3(*color))
                 ball.set_view(view)
-                sphere_model = glm.translate(glm.mat4(1.0), glm.vec3(*sphere.center))
+                sphere_model = jax.device_get(
+                    self._get_sphere_models(
+                        sphere_centers=jnp.expand_dims(sphere.center, 0)
+                    )[0]
+                )
                 ball.set_model(sphere_model)
                 ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
                 ball.set_view_position(camera_position)
@@ -365,237 +385,275 @@ class App:
                 },
             )
             simulator_state = self._simulator.init_state()
+            start = time.monotonic()
+            aot_compiled_simulate = self._jit_simulate.lower(
+                simulator_state,
+            ).compile()
+            end = time.monotonic()
+            print(f"Compiling simulator step took: {end - start} seconds.", flush=True)
             current_selected_entity = None
 
             smoothing = 0.1
             time_delta = 1 / 60.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
-            iteration = 0
-        
-            while (
-                not glfw.window_should_close(window) and glfw.get_time() < elapsed_time and iteration < max_iterations
+            with (
+                jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True)
+                if enable_profiling
+                else contextlib.nullcontext()
             ):
-                start = glfw.get_time()
-
-                rotate_camera = self.left_button_pressed and (
-                    current_selected_entity is None
-                    or current_selected_entity[0] != "spheres"
-                )
-
-                if rotate_camera:
-                    # TODO: Optimise?
-                    cursor_position_change = (
-                        self.current_cursor_position - self.last_cursor_position
-                    )
-                    camera_radians.x += math.radians(
-                        smoothing * cursor_position_change.x
-                    )
-                    camera_radians.x %= 2.0 * math.pi
-                    camera_radians.y += math.radians(
-                        smoothing * cursor_position_change.y
-                    )
-                    camera_radians.y %= 2.0 * math.pi
-
-                camera_changed = (
-                    rotate_camera
-                    or self.current_scroll_offset.x != 0
-                    or self.current_scroll_offset.y != 0
-                )
-
-                if camera_changed:
-                    # TODO: Optimise?
-                    camera_radius = (
-                        np.linalg.norm(camera_position)
-                        + 0.1 * self.current_scroll_offset.y
-                    )
-                    camera_radius = np.clip(
-                        camera_radius,
-                        0,
-                        25.0,
-                    )
-                    camera_position = glm.vec3(
-                        *update_orbit_camera_position(
-                            camera_radians[0],
-                            camera_radians[1],
-                            camera_radius,
-                        )
-                    )
-
-                self.current_scroll_offset.x = 0.0
-                self.current_scroll_offset.y = 0.0
-                self.last_cursor_position.x = self.current_cursor_position.x
-                self.last_cursor_position.y = self.current_cursor_position.y
-
-                if camera_changed:
-                    view = glm.lookAt(
-                        camera_position,
-                        glm.vec3(0.0, 0.5, 0.0),
-                        glm.vec3(0.0, 1.0, 0.0),
-                    )
-                    light.set_view(view)
-                    for ball in balls:
-                        ball.set_view(view)
-                    container.set_view(view)
-                    self._water.set_view(view)
-                    for ball in balls:
-                        ball.set_view_position(camera_position)
-                    container.set_view_position(camera_position)
-                    self._water.set_view_position(camera_position)
-
-                if self._framebuffer_size_changed:
-                    projection = glm.perspective(
-                        glm.radians(60.0),
-                        self._framebuffer_width_size / self._framebuffer_height_size,
-                        0.01,
-                        100.0,
-                    )
-                    light.set_projection(projection)
-                    for ball in balls:
-                        ball.set_projection(projection)
-                    container.set_projection(projection)
-                    self._water.set_projection(projection)
-                    self._background_camera.resize(
-                        self._framebuffer_width_size, self._framebuffer_height_size
-                    )
-                    self._framebuffer_size_changed = False
-
-                cursor_position = self.current_cursor_position
-                previous_selected_entity = current_selected_entity
-                if self.left_button_pressed:
-                    ray_direction = self._get_cursor_ray(
-                        cursor_position, projection, view
-                    )
-                    ray_direction = jnp.array(ray_direction, dtype=self._jax_float)
-
-                    jax_camera_position = jnp.array(
-                        [camera_position.x, camera_position.y, camera_position.z],
-                        dtype=self._jax_float,
-                    )
-
-                    if (
-                        not previous_left_button_pressed
-                        and current_selected_entity is None
+                iteration = 0
+                end_loop = start_loop = start_iteration = glfw.get_time()
+                try:
+                    while (
+                        not glfw.window_should_close(window)
+                        and start_iteration - start_loop < elapsed_time
+                        and iteration < max_iterations
                     ):
-                        for sphere_index, sphere in enumerate(self._spheres):
-                            raycaster.grouped_objects["spheres"][
-                                sphere_index
-                            ].center = sphere.center
-
-                        current_selected_entity = raycaster.cast(
-                            jax_camera_position,
-                            ray_direction,
+                        rotate_camera = self.left_button_pressed and (
+                            current_selected_entity is None
+                            or current_selected_entity[0] != "spheres"
                         )
 
-                        if current_selected_entity is not None:
-                            print(
-                                f"[GL] Intersection: {current_selected_entity[0]}, {current_selected_entity[1]}",
-                                flush=True,
+                        if rotate_camera:
+                            # TODO: Optimise?
+                            cursor_position_change = (
+                                self.current_cursor_position - self.last_cursor_position
+                            )
+                            camera_radians.x += math.radians(
+                                smoothing * cursor_position_change.x
+                            )
+                            camera_radians.x %= 2.0 * math.pi
+                            camera_radians.y += math.radians(
+                                smoothing * cursor_position_change.y
+                            )
+                            camera_radians.y %= 2.0 * math.pi
+
+                        camera_changed = (
+                            rotate_camera
+                            or self.current_scroll_offset.x != 0
+                            or self.current_scroll_offset.y != 0
+                        )
+
+                        if camera_changed:
+                            # TODO: Optimise?
+                            camera_radius = (
+                                np.linalg.norm(camera_position)
+                                + 0.1 * self.current_scroll_offset.y
+                            )
+                            camera_radius = np.clip(
+                                camera_radius,
+                                0,
+                                25.0,
+                            )
+                            camera_position = glm.vec3(
+                                *update_orbit_camera_position(
+                                    camera_radians[0],
+                                    camera_radians[1],
+                                    camera_radius,
+                                )
                             )
 
-                if current_selected_entity and not self.left_button_pressed:
-                    current_selected_entity = None
-                time_delta = min(1.0 / 60.0, 2.0 * time_delta)
-                if current_selected_entity:
-                    (
-                        selected_entity_type,
-                        selected_entity_index,
-                        intersection_distance,
-                    ) = current_selected_entity
-                    if selected_entity_type == "spheres":
-                        pos = (
-                            jax_camera_position
-                            + (ray_direction / jnp.linalg.norm(ray_direction))
-                            * intersection_distance
-                        )
-                        if (
-                            current_selected_entity is not None
-                            and previous_selected_entity is None
-                            or (
-                                current_selected_entity[:2]
-                                != previous_selected_entity[:2]
+                        self.current_scroll_offset.x = 0.0
+                        self.current_scroll_offset.y = 0.0
+                        self.last_cursor_position.x = self.current_cursor_position.x
+                        self.last_cursor_position.y = self.current_cursor_position.y
+
+                        if camera_changed:
+                            view = glm.lookAt(
+                                camera_position,
+                                glm.vec3(0.0, 0.5, 0.0),
+                                glm.vec3(0.0, 1.0, 0.0),
                             )
-                        ):
-                            selected_sphere_center = simulator_state.sphere_centers[
-                                selected_entity_index
-                            ]
-                            grab_position = pos
-                            selected_sphere_velocity = jnp.zeros(
-                                (3,), dtype=self._jax_float
+                            light.set_view(view)
+                            for ball in balls:
+                                ball.set_view(view)
+                            container.set_view(view)
+                            self._water.set_view(view)
+                            for ball in balls:
+                                ball.set_view_position(camera_position)
+                            container.set_view_position(camera_position)
+                            self._water.set_view_position(camera_position)
+
+                        if self._framebuffer_size_changed:
+                            projection = glm.perspective(
+                                glm.radians(60.0),
+                                self._framebuffer_width_size
+                                / self._framebuffer_height_size,
+                                0.01,
+                                100.0,
                             )
-                        else:
-                            selected_sphere_velocity = (
-                                pos - grab_position
-                            ) / time_delta
-                            selected_sphere_center = pos
-                            grab_position = pos
+                            light.set_projection(projection)
+                            for ball in balls:
+                                ball.set_projection(projection)
+                            container.set_projection(projection)
+                            self._water.set_projection(projection)
+                            self._background_camera.resize(
+                                self._framebuffer_width_size,
+                                self._framebuffer_height_size,
+                            )
+                            self._framebuffer_size_changed = False
+
+                        cursor_position = self.current_cursor_position
+                        previous_selected_entity = current_selected_entity
+                        if self.left_button_pressed:
+                            ray_direction = self._get_cursor_ray(
+                                cursor_position, projection, view
+                            )
+                            ray_direction = jnp.array(
+                                ray_direction, dtype=self._jax_float
+                            )
+
+                            jax_camera_position = jnp.array(
+                                [
+                                    camera_position.x,
+                                    camera_position.y,
+                                    camera_position.z,
+                                ],
+                                dtype=self._jax_float,
+                            )
+
+                            if (
+                                not previous_left_button_pressed
+                                and current_selected_entity is None
+                            ):
+                                for sphere_index, sphere in enumerate(self._spheres):
+                                    raycaster.grouped_objects["spheres"][
+                                        sphere_index
+                                    ].center = sphere.center
+
+                                current_selected_entity = raycaster.cast(
+                                    jax_camera_position,
+                                    ray_direction,
+                                )
+
+                                if current_selected_entity is not None:
+                                    print(
+                                        f"[GL] Intersection: {current_selected_entity[0]}, {current_selected_entity[1]}",
+                                        flush=True,
+                                    )
+
+                        if current_selected_entity and not self.left_button_pressed:
+                            current_selected_entity = None
+                        time_delta = min(1.0 / 60.0, 2.0 * time_delta)
+                        if current_selected_entity:
+                            (
+                                selected_entity_type,
+                                selected_entity_index,
+                                intersection_distance,
+                            ) = current_selected_entity
+                            if selected_entity_type == "spheres":
+                                pos = (
+                                    jax_camera_position
+                                    + (ray_direction / jnp.linalg.norm(ray_direction))
+                                    * intersection_distance
+                                )
+                                if (
+                                    current_selected_entity is not None
+                                    and previous_selected_entity is None
+                                    or (
+                                        current_selected_entity[:2]
+                                        != previous_selected_entity[:2]
+                                    )
+                                ):
+                                    selected_sphere_center = (
+                                        simulator_state.sphere_centers[
+                                            selected_entity_index
+                                        ]
+                                    )
+                                    grab_position = pos
+                                    selected_sphere_velocity = jnp.zeros(
+                                        (3,), dtype=self._jax_float
+                                    )
+                                else:
+                                    selected_sphere_velocity = (
+                                        pos - grab_position
+                                    ) / time_delta
+                                    selected_sphere_center = pos
+                                    grab_position = pos
+
+                                simulator_state = simulator_state._replace(
+                                    sphere_centers=simulator_state.sphere_centers.at[
+                                        selected_entity_index
+                                    ].set(selected_sphere_center),
+                                    sphere_velocities=simulator_state.sphere_velocities.at[
+                                        selected_entity_index
+                                    ].set(selected_sphere_velocity),
+                                )
+                        previous_selected_entity = current_selected_entity
 
                         simulator_state = simulator_state._replace(
-                            sphere_centers=simulator_state.sphere_centers.at[
-                                selected_entity_index
-                            ].set(selected_sphere_center),
-                            sphere_velocities=simulator_state.sphere_velocities.at[
-                                selected_entity_index
-                            ].set(selected_sphere_velocity),
+                            time_delta=time_delta
                         )
+                        simulator_state, water_heights, water_normals, sphere_models = (
+                            aot_compiled_simulate(
+                                simulator_state,
+                            )
+                        )
+                        (
+                            np_sphere_centers,
+                            np_water_heights,
+                            np_water_normals,
+                            np_sphere_models,
+                        ) = jax.device_get(
+                            (
+                                simulator_state.sphere_centers,
+                                water_heights,
+                                water_normals,
+                                sphere_models,
+                            )
+                        )
+                        for i in range(len(self._spheres)):
+                            self._spheres[i] = self._spheres[i]._replace(
+                                center=np_sphere_centers[i]
+                            )
+                            balls[i].set_model(np_sphere_models[i])
 
-                simulator_state = simulator_state._replace(time_delta=time_delta)
-                simulator_state, water_heights, water_normals = self._simulate(simulator_state)
+                        self._water.set_water_heights(np_water_heights)
+                        self._water.set_water_normals(np_water_normals)
 
-                previous_selected_entity = current_selected_entity
+                        self._background_camera.bind()
+                        glClearColor(0.1, 0.1, 0.1, 1.0)
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+                        container.draw()
+                        for ball in balls:
+                            ball.draw()
+                        self._background_camera.unbind()
 
-                sphere_center, water_heights, water_normals = jax.device_get((simulator_state.sphere_centers, water_heights, water_normals))
-                for i in range(len(self._spheres)):
-                    self._spheres[i] = self._spheres[i]._replace(
-                        center=sphere_center[i]
+                        glViewport(
+                            0,
+                            0,
+                            self._framebuffer_width_size,
+                            self._framebuffer_height_size,
+                        )
+                        glClearColor(0.1, 0.1, 0.1, 1.0)
+                        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+                        light.draw()
+                        container.draw()
+                        for ball in balls:
+                            ball.draw()
+                        self._water.draw()
+
+                        glfw.swap_buffers(window)
+                        previous_left_button_pressed = self.left_button_pressed
+                        glfw.poll_events()
+                        end_iteration = glfw.get_time()
+                        time_delta = end_iteration - start_iteration
+                        start_iteration = end_iteration
+                        iteration += 1
+                except KeyboardInterrupt:
+                    pass
+                finally:
+                    end_loop = glfw.get_time()
+                    average_latency_seconds = (end_loop - start_loop) / iteration
+                    print(
+                        f"Average FPS: {1.0 / average_latency_seconds} | Average Latency: {average_latency_seconds * 1000:.3f}ms.",
+                        flush=True,
                     )
-                    sphere_model = glm.translate(
-                        glm.mat4(1.0), glm.vec3(*self._spheres[i].center)
-                    )
-                    balls[i].set_model(sphere_model)
-
-                self._water.set_water_heights(glm.array(water_heights))
-                self._water.set_water_normals(glm.array(water_normals))
-
-                self._background_camera.bind()
-                glClearColor(0.1, 0.1, 0.1, 1.0)
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-                container.draw()
-                for ball in balls:
-                    ball.draw()
-                self._background_camera.unbind()
-
-                glViewport(
-                    0, 0, self._framebuffer_width_size, self._framebuffer_height_size
-                )
-                glClearColor(0.1, 0.1, 0.1, 1.0)
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-                light.draw()
-                container.draw()
-                for ball in balls:
-                    ball.draw()
-                self._water.draw()
-
-                glfw.swap_buffers(window)
-                previous_left_button_pressed = self.left_button_pressed
-                glfw.poll_events()
-                end = glfw.get_time()
-                time_delta = end - start
-                print(f"[GL] Time Delta: {time_delta*1000.:.2f}ms")
-
-                if enable_profiling and iteration == 2:
-                    # nvidia_profiler.start()
-                    jax.profiler.start_trace("/tmp/jax-trace", create_perfetto_link=True)
-                iteration += 1
         finally:
             print("[GL] Terminating", flush=True)
             glfw.terminate()
-
-            jax.profiler.stop_trace()
-
-            # if nvidia_profiler.running:
-            #     nvidia_profiler.stop()
 
     def _get_cursor_ray(
         self, cursor_position: glm.vec2, projection: glm.mat4, view: glm.mat4
@@ -611,6 +669,13 @@ class App:
         ray_world = glm.normalize(ray_world)
         return ray_world
 
+    def _get_sphere_models(self, sphere_centers: jax.Array) -> jax.Array:
+        sphere_models = jnp.repeat(
+            jnp.expand_dims(jnp.identity(4), 0), len(self._spheres), axis=0
+        )
+        sphere_models = sphere_models.at[:, :3, 3].set(sphere_centers)
+        return sphere_models.reshape((sphere_models.shape[0], -1), order="F")
+
 
 def main():
     argument_parser = argparse.ArgumentParser(
@@ -619,9 +684,8 @@ def main():
     argument_parser.add_argument(
         "--n", type=int, default=101, help="number of cubes in the x and z axis"
     )
-    argument_parser.add_argument(
-        "--max_iterations", type=int, default=float('inf')
-    )
+    argument_parser.add_argument("--max_seconds", type=int, default=float("inf"))
+    argument_parser.add_argument("--max_iterations", type=int, default=float("inf"))
     argument_parser.add_argument(
         "--enable_profiling", action="store_true", default=False
     )
@@ -629,7 +693,11 @@ def main():
     n = arguments.n
     print(f"Using {n*n} instances", flush=True)
     app = App(n, n, 0.02)
-    app.render_until(max_iterations=arguments.max_iterations, enable_profiling=arguments.enable_profiling)
+    app.render_until(
+        elapsed_time=arguments.max_seconds,
+        max_iterations=arguments.max_iterations,
+        enable_profiling=arguments.enable_profiling,
+    )
 
 
 if __name__ == "__main__":

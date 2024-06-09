@@ -1,8 +1,9 @@
-import typing
-import jax.numpy as jnp
 import abc
-import jax
+import typing
 from typing import Optional
+
+import jax
+import jax.numpy as jnp
 
 
 class Ray(typing.NamedTuple):
@@ -233,7 +234,6 @@ class Raycaster:
         # else...
         group, i, distance = min(results, key=lambda x: x[2])
         return group, i, distance.item()
-        
 
     def _cast(
         self,

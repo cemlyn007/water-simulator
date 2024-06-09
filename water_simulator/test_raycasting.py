@@ -1,6 +1,7 @@
-from water_simulator import raycasting
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+
+from water_simulator import raycasting
 
 
 class TestRaycasting:

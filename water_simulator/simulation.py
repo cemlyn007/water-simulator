@@ -1,13 +1,14 @@
-from water_simulator import collisions
+import typing
 from typing import Sequence
+
 import jax
 import jax.numpy as jnp
-import typing
 import numpy as np
+
+from water_simulator import collisions
 
 
 class State(typing.NamedTuple):
-    time: float
     sphere_centers: jax.Array
     water_heights: jax.Array
     sphere_velocities: jax.Array
@@ -49,14 +50,13 @@ class Simulator:
 
     def init_state(self) -> State:
         return State(
-            time=0.0,
-            sphere_centers=self._spheres.center,
+            sphere_centers=self._spheres.center.copy(),
             water_heights=self._grid_init_y.copy(),
             sphere_velocities=jnp.zeros_like(self._spheres.center),
-            water_velocities=jnp.zeros((self._n, self._m), dtype=self._dtype),
-            wave_speed=2.0,
-            body_heights=jnp.zeros((self._n, self._m), dtype=self._dtype),
-            time_delta=0.0,
+            water_velocities=jnp.zeros((self._n, self._m), dtype=self._dtype).ravel(),
+            wave_speed=jnp.array(2.0, self._dtype),
+            body_heights=jnp.zeros((self._n, self._m), dtype=self._dtype).ravel(),
+            time_delta=jnp.array(0.0, self._dtype),
         )
 
     def simulate(self, state: State) -> State:
@@ -122,7 +122,6 @@ class Simulator:
 
         # Now let us add the behaviour between the sphere and the walls.
         return State(
-            time=state.time + time_delta,
             sphere_centers=sphere_center,
             water_heights=jnp.ravel(water_heights),
             sphere_velocities=sphere_velocities,
@@ -684,4 +683,3 @@ class WaterVertexNormalUpdater:
         )
         normals /= jnp.linalg.norm(normals, axis=1)[:, None]
         return normals
-

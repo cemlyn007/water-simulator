@@ -1,10 +1,11 @@
+import functools
 import os
+
+import glm
+import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
 
-import functools
-import numpy as np
-import glm
 from water_simulator.meshes import geometry
 
 
@@ -47,7 +48,7 @@ class Water:
     @property
     def xz(self) -> np.ndarray:
         return self._xz
-    
+
     @property
     def indices(self) -> np.ndarray:
         return np.array(self._indices)
@@ -210,7 +211,7 @@ class Water:
         glUseProgram(self._shader)
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, texture)
-        glUniform1i(glGetUniformLocation(self._shader, "background"), 0)
+        glUniform1i(self._background_uniform_location, 0)
 
     def set_view_position(self, view_position: glm.vec3) -> None:
         self._view_position = view_position
@@ -252,33 +253,32 @@ class Water:
             light_position.z,
         )
 
-    def set_water_heights(self, water_heights: glm.array) -> None:
-        self._water_heights = water_heights
+    def set_water_heights(self, water_heights: np.ndarray) -> None:
         if len(water_heights) != self._n_vertices:
             raise ValueError(
                 f"Water heights array must have {self._n_vertices} elements."
             )
         # else...
         glBindBuffer(GL_ARRAY_BUFFER, self._height_vbo)
-        glBufferSubData(
+        glBufferData(
             GL_ARRAY_BUFFER,
-            0,
-            glm.sizeof(water_heights),
-            water_heights.ptr,
+            water_heights.nbytes,
+            water_heights,
+            GL_DYNAMIC_DRAW,
         )
 
-    def set_water_normals(self, water_normals: glm.array) -> None:
+    def set_water_normals(self, water_normals: np.ndarray) -> None:
         if len(water_normals) != self._n_normal_elements:
             raise ValueError(
                 f"Water normals array must have {self._n_vertices} elements."
             )
         # else...
         glBindBuffer(GL_ARRAY_BUFFER, self._normal_vbo)
-        glBufferSubData(
+        glBufferData(
             GL_ARRAY_BUFFER,
-            0,
-            glm.sizeof(water_normals),
-            water_normals.ptr,
+            water_normals.nbytes,
+            water_normals,
+            GL_DYNAMIC_DRAW,
         )
 
     def draw(self) -> None:
@@ -296,19 +296,24 @@ class Water:
 
     @property
     @functools.cache
+    def _background_uniform_location(self) -> int:
+        return glGetUniformLocation(self._shader, "background")
+
+    @property
+    @functools.cache
     def _light_color_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "lightColor")
-    
+
     @property
     @functools.cache
     def _view_position_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "viewPos")
-    
+
     @property
     @functools.cache
     def _view_uniform_location(self) -> int:
         return glGetUniformLocation(self._shader, "view")
-    
+
     @property
     @functools.cache
     def _projection_uniform_location(self) -> int:
