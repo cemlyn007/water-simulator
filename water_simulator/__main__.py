@@ -244,15 +244,15 @@ class App:
                 100.0,
             )
 
-            light.set_projection(projection)
-            light.set_color(glm.vec3(1.0, 1.0, 1.0))
-            light.set_view(view)
+            light.set_projection(np.array(projection).T)
+            light.set_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
+            light.set_view(np.array(view).T)
             model = glm.mat4(1.0)
             model = glm.translate(
                 model, glm.vec3(light_position[0], light_position[1], light_position[2])
             )
             model = glm.scale(model, glm.vec3(0.2))
-            light.set_model(model)
+            light.set_model(np.array(model).T)
 
             container.set_projection(np.array(projection).T)
             container.set_color(np.array((0.7, 0.7, 0.7), dtype=np.float32))
@@ -469,7 +469,7 @@ class App:
                                 glm.vec3(0.0, 0.5, 0.0),
                                 glm.vec3(0.0, 1.0, 0.0),
                             )
-                            light.set_view(view)
+                            light.set_view(np.array(view).T)
                             for ball in balls:
                                 ball.set_view(np.array(view).T)
                             container.set_view(np.array(view).T)

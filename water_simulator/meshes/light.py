@@ -1,6 +1,5 @@
 import os
 
-import glm
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
@@ -12,25 +11,23 @@ class Light:
     def __init__(self) -> None:
         self._shader = None
         vertices, _, indices = geometry.cube_vertices_normals_and_indices()
-        vertex_data = glm.array(np.array(vertices, dtype=np.float32))
+        vertex_data = np.array(vertices, dtype=np.float32)
 
         self._vbo = self._init_vbo(vertex_data)
-        self._ebo = self._init_ebo(
-            glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
-        )
+        self._ebo = self._init_ebo(np.array(indices, dtype=np.uint32))
         self._vao = self._init_vao(self._vbo, self._ebo, vertex_data)
         self._shader = self._init_shader(self._vao)
         glUseProgram(0)
         glBindVertexArray(0)
 
-    def _init_vbo(self, vertex_data: glm.array) -> GLint:
+    def _init_vbo(self, vertex_data: np.ndarray) -> GLint:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
-                glm.sizeof(vertex_data),
-                vertex_data.ptr,
+                vertex_data.nbytes,
+                vertex_data,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -38,14 +35,14 @@ class Light:
             raise exception
         return vbo
 
-    def _init_ebo(self, indices: glm.array) -> GLint:
+    def _init_ebo(self, indices: np.ndarray) -> GLint:
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             glBufferData(
                 GL_ELEMENT_ARRAY_BUFFER,
-                glm.sizeof(indices),
-                indices.ptr,
+                indices.nbytes,
+                indices,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -53,7 +50,7 @@ class Light:
             raise exception
         return ebo
 
-    def _init_vao(self, vbo: GLint, ebo: GLint, vertex_data: glm.array) -> GLint:
+    def _init_vao(self, vbo: GLint, ebo: GLint, vertex_data: np.ndarray) -> GLint:
         vao = glGenVertexArrays(1)
         try:
             glBindVertexArray(vao)
@@ -61,7 +58,7 @@ class Light:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
 
             glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 3 * vertex_data.dt_size, ctypes.c_void_p(0)
+                0, 3, GL_FLOAT, GL_FALSE, 3 * vertex_data.itemsize, ctypes.c_void_p(0)
             )
             glEnableVertexAttribArray(0)
         except Exception as exception:
@@ -99,41 +96,50 @@ class Light:
             raise exception
         return light_cube_shader
 
-    def set_view(self, view: glm.mat4) -> None:
-        self._view = view
+    def set_view(self, view: np.ndarray) -> None:
+        if view.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "view"),
             1,
             GL_FALSE,
-            glm.value_ptr(self._view),
+            view,
         )
 
-    def set_projection(self, projection: glm.mat4) -> None:
-        self._projection = projection
+    def set_projection(self, projection: np.ndarray) -> None:
+        if projection.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "projection"),
             1,
             GL_FALSE,
-            glm.value_ptr(self._projection),
+            projection,
         )
 
-    def set_color(self, color: glm.vec3) -> None:
+    def set_color(self, color: np.ndarray) -> None:
+        if color.size != 3:
+            raise ValueError("Expected 3 elements")
         glUseProgram(self._shader)
         glUniform3fv(
             glGetUniformLocation(self._shader, "objectColor"),
             1,
-            glm.value_ptr(color),
+            color,
         )
 
-    def set_model(self, model: glm.mat4) -> None:
+    def set_model(self, model: np.ndarray) -> None:
+        if model.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "model"),
             1,
             GL_FALSE,
-            glm.value_ptr(model),
+            model,
         )
 
     def draw(self) -> None:
