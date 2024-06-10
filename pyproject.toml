@@ -15,12 +15,11 @@ classifiers = [
 ]
 
 dependencies = [
-  "glfw==2.6.2",
-  "jax==0.4.16",
+  "glfw<3.0.0",
+  "jax",
   "PyOpenGL==3.1.7",
   "PyOpenGL-accelerate==3.1.7",
-  "PyGLM==2.7.0",
-  "numpy==1.24.4",
+  "numpy",
 ]
 
 [tool.setuptools]

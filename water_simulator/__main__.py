@@ -1,13 +1,11 @@
 import argparse
 import contextlib
-import ctypes
 import math
 import sys
 import time
 from typing import Sequence
 
 import glfw
-import glm
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -258,7 +256,7 @@ class App:
             container.set_projection(projection)
             container.set_color(np.array((0.7, 0.7, 0.7), dtype=np.float32))
             container.set_view(view)
-            container.set_model(np.array(glm.mat4(1.0)).T)
+            container.set_model(np.identity(4, dtype=np.float32))
             container.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             container.set_view_position(camera_position)
             container.set_light_position(light_position)
@@ -504,6 +502,7 @@ class App:
                             ray_direction = self._get_cursor_ray(
                                 cursor_position, projection, view
                             )
+                            # ray_direction = ray_direction.T
                             ray_direction = jnp.array(
                                 ray_direction, dtype=self._jax_float
                             )
@@ -667,15 +666,13 @@ class App:
     ) -> np.ndarray:
         x = (2.0 * cursor_position[0]) / self._width - 1.0
         y = 1.0 - (2.0 * cursor_position[1]) / self._height
-        z = 1.0
-        ray_nds = glm.vec3(x, y, z)
-        ray_clip = glm.vec4(ray_nds.xy, -1.0, 1.0)
-        ray_eye = glm.inverse(glm.mat4(projection.T)) * ray_clip
-        ray_eye = glm.vec4(ray_eye.xy, -1.0, 0.0)
-        ray_world = glm.vec3(glm.inverse(glm.mat4(view.T)) * ray_eye).xyz
-        ray_world = np.array(ray_world)
+        ray_clip = np.array((x, y, -1.0, 1.0))
+        ray_eye = np.dot(np.linalg.inv(projection.T), ray_clip)
+        ray_eye = np.array((ray_eye[0], ray_eye[1], -1.0, 0.0))
+        ray_world = np.dot(np.linalg.inv(view.T), ray_eye)
+        ray_world = np.array(ray_world[:3])
         ray_world /= np.linalg.norm(ray_world)
-        return ray_world
+        return ray_world.astype(np.float32)
 
     def _get_sphere_models(self, sphere_centers: jax.Array) -> jax.Array:
         sphere_models = jnp.repeat(
