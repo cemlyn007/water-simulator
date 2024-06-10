@@ -217,7 +217,7 @@ class App:
                 wall_thickness,
             )
             balls = [meshes.Ball(sphere.radius.item()) for sphere in self._spheres]
-            light_position = glm.vec3(1.2, 4.0, 2.0)
+            light_position = np.array((1.2, 4.0, 2.0), dtype=np.float32)
 
             camera_position = glm.normalize(glm.vec3(3.0, 7.0, 3.0))
             camera_radians = glm.vec2(
@@ -260,7 +260,7 @@ class App:
             container.set_model(np.array(glm.mat4(1.0)).T)
             container.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             container.set_view_position(np.array(camera_position))
-            container.set_light_position(np.array(light_position))
+            container.set_light_position(light_position)
 
             for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
                 ball.set_projection(np.array(projection).T)
@@ -274,7 +274,7 @@ class App:
                 ball.set_model(np.array(sphere_model).T)
                 ball.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
                 ball.set_view_position(np.array(camera_position))
-                ball.set_light_position(np.array(light_position))
+                ball.set_light_position(light_position)
 
             self._water.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             self._water.set_texture(self._background_camera.rendered_texture)
@@ -282,7 +282,7 @@ class App:
             self._water.set_view_position(camera_position)
             self._water.set_view(np.array(view).T)
             self._water.set_projection(np.array(projection).T)
-            self._water.set_light_position(np.array(light_position))
+            self._water.set_light_position(light_position)
 
             raycaster = raycasting.Raycaster(
                 {
