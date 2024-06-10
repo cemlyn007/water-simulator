@@ -264,7 +264,7 @@ class App:
 
             for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
                 ball.set_projection(projection)
-                ball.set_color(glm.vec3(*color))
+                ball.set_color(np.array(color, dtype=np.float32))
                 ball.set_view(view)
                 sphere_model = jax.device_get(
                     self._get_sphere_models(
@@ -272,17 +272,17 @@ class App:
                     )[0]
                 )
                 ball.set_model(sphere_model)
-                ball.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+                ball.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
                 ball.set_view_position(camera_position)
                 ball.set_light_position(light_position)
 
-            self._water.set_light_color(glm.vec3(1.0, 1.0, 1.0))
+            self._water.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             self._water.set_texture(self._background_camera.rendered_texture)
 
             self._water.set_view_position(camera_position)
-            self._water.set_view(view)
-            self._water.set_projection(projection)
-            self._water.set_light_position(light_position)
+            self._water.set_view(np.array(view).T)
+            self._water.set_projection(np.array(projection).T)
+            self._water.set_light_position(np.array(light_position))
 
             raycaster = raycasting.Raycaster(
                 {
@@ -473,7 +473,7 @@ class App:
                             for ball in balls:
                                 ball.set_view(view)
                             container.set_view(view)
-                            self._water.set_view(view)
+                            self._water.set_view(np.array(view).T)
                             for ball in balls:
                                 ball.set_view_position(camera_position)
                             container.set_view_position(camera_position)

@@ -159,14 +159,13 @@ class Ball:
             raise exception
         return shader
 
-    def set_light_color(self, light_color: glm.vec3) -> None:
-        self._light_color = light_color
+    def set_light_color(self, light_color: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniform3f(
             self._light_color_uniform_location,
-            light_color.x,
-            light_color.y,
-            light_color.z,
+            light_color[0],
+            light_color[1],
+            light_color[2],
         )
 
     def set_view_position(self, view_position: glm.vec3) -> None:
@@ -209,12 +208,12 @@ class Ball:
             light_position.z,
         )
 
-    def set_color(self, color: glm.vec3) -> None:
+    def set_color(self, color: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniform3fv(
             glGetUniformLocation(self._shader, "objectColor"),
             1,
-            glm.value_ptr(color),
+            color,
         )
 
     def set_model(self, model: np.ndarray) -> None:

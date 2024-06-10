@@ -1,7 +1,6 @@
 import functools
 import os
 
-import glm
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
@@ -25,12 +24,12 @@ class Water:
             vertex_data.extend(vertex)
             normal_data.extend(normal)
         self._xz = np.array(vertex_data, dtype=np.float32)
-        vertex_data = glm.array(np.array(vertex_data, dtype=np.float32))
-        normal_data = glm.array(np.array(normal_data, dtype=np.float32))
+        vertex_data = np.array(vertex_data, dtype=np.float32)
+        normal_data = np.array(normal_data, dtype=np.float32)
 
         self._normal_vbo = self._init_normal_vbo(normal_data)
         self._vbo = self._init_vbo(vertex_data)
-        self._indices = glm.array(indices, dtype=glm.uint32)
+        self._indices = indices
         self._ebo = self._init_ebo(self._indices)
 
         self._height_vbo = self._init_model_y_vbo()
@@ -53,14 +52,14 @@ class Water:
     def indices(self) -> np.ndarray:
         return np.array(self._indices)
 
-    def _init_vbo(self, vertex_data: glm.array) -> GLint:
+    def _init_vbo(self, vertex_data: np.ndarray) -> GLint:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
-                glm.sizeof(vertex_data),
-                vertex_data.ptr,
+                vertex_data.nbytes,
+                vertex_data,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -74,7 +73,7 @@ class Water:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
-                self._n_vertices * glm.sizeof(glm.float32),
+                self._n_vertices * np.float32().itemsize,
                 None,
                 GL_DYNAMIC_DRAW,
             )
@@ -83,14 +82,14 @@ class Water:
             raise exception
         return vbo
 
-    def _init_normal_vbo(self, normal_data: glm.array) -> GLint:
+    def _init_normal_vbo(self, normal_data: np.ndarray) -> GLint:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
             glBufferData(
                 GL_ARRAY_BUFFER,
-                glm.sizeof(normal_data),
-                normal_data.ptr,
+                normal_data.nbytes,
+                normal_data,
                 GL_DYNAMIC_DRAW,
             )
         except Exception as exception:
@@ -98,15 +97,15 @@ class Water:
             raise exception
         return vbo
 
-    def _init_ebo(self, indices: glm.array) -> GLint:
+    def _init_ebo(self, indices: np.ndarray) -> GLint:
         self._len_ebo = len(indices)
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             glBufferData(
                 GL_ELEMENT_ARRAY_BUFFER,
-                glm.sizeof(indices),
-                indices.ptr,
+                indices.nbytes,
+                indices,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -197,14 +196,16 @@ class Water:
             raise exception
         return light_cube_shader
 
-    def set_light_color(self, light_color: glm.vec3) -> None:
+    def set_light_color(self, light_color: np.ndarray) -> None:
+        if light_color.shape != (3,):
+            raise ValueError("Expected 3 elements")
         self._light_color = light_color
         glUseProgram(self._shader)
         glUniform3f(
             self._light_color_uniform_location,
-            light_color.x,
-            light_color.y,
-            light_color.z,
+            light_color[0],
+            light_color[1],
+            light_color[2],
         )
 
     def set_texture(self, texture: int) -> None:
@@ -213,44 +214,44 @@ class Water:
         glBindTexture(GL_TEXTURE_2D, texture)
         glUniform1i(self._background_uniform_location, 0)
 
-    def set_view_position(self, view_position: glm.vec3) -> None:
-        self._view_position = view_position
+    def set_view_position(self, view_position: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniform3f(
             self._view_position_uniform_location,
-            view_position.x,
-            view_position.y,
-            view_position.z,
+            view_position[0],
+            view_position[1],
+            view_position[2],
         )
 
-    def set_view(self, view: glm.mat4) -> None:
-        self._view = view
+    def set_view(self, view: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._view_uniform_location,
             1,
             GL_FALSE,
-            glm.value_ptr(view),
+            view,
         )
 
-    def set_projection(self, projection: glm.mat4) -> None:
-        self._projection = projection
+    def set_projection(self, projection: np.ndarray) -> None:
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._projection_uniform_location,
             1,
             GL_FALSE,
-            glm.value_ptr(projection),
+            projection,
         )
 
-    def set_light_position(self, light_position: glm.vec3) -> None:
+    def set_light_position(self, light_position: np.ndarray) -> None:
+        if light_position.shape != (3,):
+            raise ValueError("Expected 3 elements")
+        # else...
         self._light_position = light_position
         glUseProgram(self._shader)
         glUniform3f(
             glGetUniformLocation(self._shader, "lightPos"),
-            light_position.x,
-            light_position.y,
-            light_position.z,
+            light_position[0],
+            light_position[1],
+            light_position[2],
         )
 
     def set_water_heights(self, water_heights: np.ndarray) -> None:
