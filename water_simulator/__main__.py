@@ -30,9 +30,9 @@ class App:
         self._n = n
         self._m = m
         self._cube_width = cube_width
-        self.current_cursor_position = glm.vec2(0.0, 0.0)
-        self.last_cursor_position = glm.vec2(0.0, 0.0)
-        self.current_scroll_offset = glm.vec2(0.0, 0.0)
+        self.current_cursor_position = np.array((0.0, 0.0), dtype=np.float32)
+        self.last_cursor_position = np.array((0.0, 0.0), dtype=np.float32)
+        self.current_scroll_offset = np.array((0.0, 0.0), dtype=np.float32)
         self.left_button_pressed = False
         self._framebuffer_size_changed = False
 
@@ -101,10 +101,10 @@ class App:
         self._framebuffer_height_size = height
 
     def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
-        self.last_cursor_position.x = self.current_cursor_position.x
-        self.last_cursor_position.y = self.current_cursor_position.y
-        self.current_cursor_position.x = xpos
-        self.current_cursor_position.y = ypos
+        self.last_cursor_position[0] = self.current_cursor_position[0]
+        self.last_cursor_position[1] = self.current_cursor_position[1]
+        self.current_cursor_position[0] = xpos
+        self.current_cursor_position[1] = ypos
 
     def mouse_button_callback(
         self, window, button: int, action: int, mods: int
@@ -221,9 +221,12 @@ class App:
 
             camera_position = np.array((3.0, 7.0, 3.0), dtype=np.float32)
             camera_position /= np.linalg.norm(camera_position)
-            camera_radians = glm.vec2(
-                math.atan(camera_position[2] / camera_position[0]),
-                math.atan(camera_position[1] / camera_position[0]),
+            camera_radians = np.array(
+                (
+                    math.atan(camera_position[2] / camera_position[0]),
+                    math.atan(camera_position[1] / camera_position[0]),
+                ),
+                dtype=np.float32,
             )
             camera_position = update_orbit_camera_position(
                 camera_radians[0],
@@ -236,35 +239,38 @@ class App:
                 glm.vec3(0.0, 0.5, 0.0),
                 glm.vec3(0.0, 1.0, 0.0),
             )
+            view = np.array(view).T
             projection = glm.perspective(
-                glm.radians(60.0),
+                np.radians(60.0),
                 self._framebuffer_width_size / self._framebuffer_height_size,
                 0.01,
                 100.0,
             )
+            projection = np.array(projection).T
 
-            light.set_projection(np.array(projection).T)
+            light.set_projection(projection)
             light.set_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
-            light.set_view(np.array(view).T)
+            light.set_view(view)
             model = glm.mat4(1.0)
             model = glm.translate(
                 model, glm.vec3(light_position[0], light_position[1], light_position[2])
             )
             model = glm.scale(model, glm.vec3(0.2))
-            light.set_model(np.array(model).T)
+            model = np.array(model).T
+            light.set_model(model)
 
-            container.set_projection(np.array(projection).T)
+            container.set_projection(projection)
             container.set_color(np.array((0.7, 0.7, 0.7), dtype=np.float32))
-            container.set_view(np.array(view).T)
+            container.set_view(view)
             container.set_model(np.array(glm.mat4(1.0)).T)
             container.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             container.set_view_position(camera_position)
             container.set_light_position(light_position)
 
             for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
-                ball.set_projection(np.array(projection).T)
+                ball.set_projection(projection)
                 ball.set_color(np.array(color, dtype=np.float32))
-                ball.set_view(np.array(view).T)
+                ball.set_view(view)
                 sphere_model = jax.device_get(
                     self._get_sphere_models(
                         sphere_centers=jnp.expand_dims(sphere.center, 0)
@@ -279,8 +285,8 @@ class App:
             self._water.set_texture(self._background_camera.rendered_texture)
 
             self._water.set_view_position(camera_position)
-            self._water.set_view(np.array(view).T)
-            self._water.set_projection(np.array(projection).T)
+            self._water.set_view(view)
+            self._water.set_projection(projection)
             self._water.set_light_position(light_position)
 
             raycaster = raycasting.Raycaster(
@@ -423,26 +429,26 @@ class App:
                             cursor_position_change = (
                                 self.current_cursor_position - self.last_cursor_position
                             )
-                            camera_radians.x += math.radians(
-                                SMOOTHING * cursor_position_change.x
+                            camera_radians[0] += math.radians(
+                                SMOOTHING * cursor_position_change[0]
                             )
-                            camera_radians.x %= 2.0 * math.pi
-                            camera_radians.y += math.radians(
-                                SMOOTHING * cursor_position_change.y
+                            camera_radians[0] %= 2.0 * math.pi
+                            camera_radians[1] += math.radians(
+                                SMOOTHING * cursor_position_change[1]
                             )
-                            camera_radians.y %= 2.0 * math.pi
+                            camera_radians[1] %= 2.0 * math.pi
 
                         camera_changed = (
                             rotate_camera
-                            or self.current_scroll_offset.x != 0
-                            or self.current_scroll_offset.y != 0
+                            or self.current_scroll_offset[0] != 0
+                            or self.current_scroll_offset[1] != 0
                         )
 
                         if camera_changed:
                             # TODO: Optimise?
                             camera_radius = (
                                 np.linalg.norm(camera_position)
-                                + 0.1 * self.current_scroll_offset.y
+                                + 0.1 * self.current_scroll_offset[1]
                             )
                             camera_radius = np.clip(
                                 camera_radius,
@@ -455,10 +461,10 @@ class App:
                                 camera_radius,
                             )
 
-                        self.current_scroll_offset.x = 0.0
-                        self.current_scroll_offset.y = 0.0
-                        self.last_cursor_position.x = self.current_cursor_position.x
-                        self.last_cursor_position.y = self.current_cursor_position.y
+                        self.current_scroll_offset[0] = 0.0
+                        self.current_scroll_offset[1] = 0.0
+                        self.last_cursor_position[0] = self.current_cursor_position[0]
+                        self.last_cursor_position[1] = self.current_cursor_position[1]
 
                         if camera_changed:
                             view = glm.lookAt(
@@ -466,11 +472,12 @@ class App:
                                 glm.vec3(0.0, 0.5, 0.0),
                                 glm.vec3(0.0, 1.0, 0.0),
                             )
-                            light.set_view(np.array(view).T)
+                            view = np.array(view).T
+                            light.set_view(view)
                             for ball in balls:
-                                ball.set_view(np.array(view).T)
-                            container.set_view(np.array(view).T)
-                            self._water.set_view(np.array(view).T)
+                                ball.set_view(view)
+                            container.set_view(view)
+                            self._water.set_view(view)
                             for ball in balls:
                                 ball.set_view_position(camera_position)
                             container.set_view_position(camera_position)
@@ -478,12 +485,13 @@ class App:
 
                         if self._framebuffer_size_changed:
                             projection = glm.perspective(
-                                glm.radians(60.0),
+                                np.radians(60.0),
                                 self._framebuffer_width_size
                                 / self._framebuffer_height_size,
                                 0.01,
                                 100.0,
                             )
+                            projection = np.array(projection).T
                             light.set_projection(projection)
                             for ball in balls:
                                 ball.set_projection(projection)
@@ -660,17 +668,18 @@ class App:
             glfw.terminate()
 
     def _get_cursor_ray(
-        self, cursor_position: glm.vec2, projection: glm.mat4, view: glm.mat4
-    ) -> glm.vec3:
-        x = (2.0 * cursor_position.x) / self._width - 1.0
-        y = 1.0 - (2.0 * cursor_position.y) / self._height
+        self, cursor_position: np.ndarray, projection: np.ndarray, view: np.ndarray
+    ) -> np.ndarray:
+        x = (2.0 * cursor_position[0]) / self._width - 1.0
+        y = 1.0 - (2.0 * cursor_position[1]) / self._height
         z = 1.0
         ray_nds = glm.vec3(x, y, z)
         ray_clip = glm.vec4(ray_nds.xy, -1.0, 1.0)
-        ray_eye = glm.inverse(projection) * ray_clip
+        ray_eye = glm.inverse(projection.T) * ray_clip
         ray_eye = glm.vec4(ray_eye.xy, -1.0, 0.0)
-        ray_world = glm.vec3(glm.inverse(view) * ray_eye).xyz
-        ray_world = glm.normalize(ray_world)
+        ray_world = glm.vec3(glm.inverse(view.T) * ray_eye).xyz
+        ray_world = np.array(ray_world)
+        ray_world /= np.linalg.norm(ray_world)
         return ray_world
 
     def _get_sphere_models(self, sphere_centers: jax.Array) -> jax.Array:
