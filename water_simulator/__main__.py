@@ -254,13 +254,13 @@ class App:
             model = glm.scale(model, glm.vec3(0.2))
             light.set_model(model)
 
-            container.set_projection(projection)
-            container.set_color(glm.vec3(0.7, 0.7, 0.7))
-            container.set_view(view)
-            container.set_model(glm.mat4(1.0))
-            container.set_light_color(glm.vec3(1.0, 1.0, 1.0))
-            container.set_view_position(camera_position)
-            container.set_light_position(light_position)
+            container.set_projection(np.array(projection).T)
+            container.set_color(np.array((0.7, 0.7, 0.7), dtype=np.float32))
+            container.set_view(np.array(view).T)
+            container.set_model(np.array(glm.mat4(1.0)).T)
+            container.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
+            container.set_view_position(np.array(camera_position))
+            container.set_light_position(np.array(light_position))
 
             for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
                 ball.set_projection(np.array(projection).T)
@@ -472,11 +472,11 @@ class App:
                             light.set_view(view)
                             for ball in balls:
                                 ball.set_view(np.array(view).T)
-                            container.set_view(view)
+                            container.set_view(np.array(view).T)
                             self._water.set_view(np.array(view).T)
                             for ball in balls:
                                 ball.set_view_position(np.array(camera_position))
-                            container.set_view_position(camera_position)
+                            container.set_view_position(np.array(camera_position))
                             self._water.set_view_position(camera_position)
 
                         if self._framebuffer_size_changed:

@@ -1,6 +1,5 @@
 import os
 
-import glm
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
@@ -21,7 +20,7 @@ class Container:
 
     def _create_mesh(
         self, size: float, wall_thickness: float
-    ) -> tuple[glm.array, glm.array]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         (
             cube_vertices,
             cube_normals,
@@ -116,32 +115,28 @@ class Container:
                 [i * (max(cube_indices) + 1) + index + offset for index in cube_indices]
             )
 
-        vertex_data = glm.array(
-            np.array(vertex_data, dtype=np.float32), dtype=glm.float32
-        )
-        indices = glm.array(np.array(indices, dtype=np.uint32), dtype=glm.uint32)
+        vertex_data = np.array(vertex_data, dtype=np.float32)
+        indices = np.array(indices, dtype=np.uint32)
         return vertex_data, indices
 
-    def _init_vbo(self, vertex: glm.array) -> None:
+    def _init_vbo(self, vertex: np.ndarray) -> None:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER, glm.sizeof(vertex), vertex.ptr, GL_STATIC_DRAW
-            )
+            glBufferData(GL_ARRAY_BUFFER, vertex.nbytes, vertex, GL_STATIC_DRAW)
         except Exception as exception:
             glDeleteBuffers(1, self._vbo)
             raise exception
         return vbo
 
-    def _init_ebo(self, indices: glm.array) -> None:
+    def _init_ebo(self, indices: np.ndarray) -> None:
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             glBufferData(
                 GL_ELEMENT_ARRAY_BUFFER,
-                glm.sizeof(indices),
-                indices.ptr,
+                indices.nbytes,
+                indices,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -157,7 +152,7 @@ class Container:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             # Positions.
             glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None
+                0, 3, GL_FLOAT, GL_FALSE, 6 * np.float32().itemsize, None
             )
             glEnableVertexAttribArray(0)
             # Normals.
@@ -166,8 +161,8 @@ class Container:
                 3,
                 GL_FLOAT,
                 GL_FALSE,
-                6 * glm.sizeof(glm.float32),
-                ctypes.c_void_p(3 * glm.sizeof(glm.float32)),
+                6 * np.float32().itemsize,
+                ctypes.c_void_p(3 * np.float32().itemsize),
             )
             glEnableVertexAttribArray(1)
         except Exception as exception:
@@ -205,71 +200,87 @@ class Container:
             raise exception
         return shader
 
-    def set_light_color(self, light_color: glm.vec3) -> None:
-        self._light_color = light_color
+    def set_light_color(self, light_color: np.ndarray) -> None:
+        if light_color.size != 3:
+            raise ValueError("Expected 3 elements")
+        # else...
         glUseProgram(self._shader)
         glUniform3f(
             glGetUniformLocation(self._shader, "lightColor"),
-            light_color.x,
-            light_color.y,
-            light_color.z,
+            light_color[0],
+            light_color[1],
+            light_color[2],
         )
 
-    def set_view_position(self, view_position: glm.vec3) -> None:
-        self._view_position = view_position
+    def set_view_position(self, view_position: np.ndarray) -> None:
+        if view_position.size != 3:
+            raise ValueError("Expected 3 elements")
+        # else...
         glUseProgram(self._shader)
         glUniform3f(
             glGetUniformLocation(self._shader, "viewPos"),
-            view_position.x,
-            view_position.y,
-            view_position.z,
+            view_position[0],
+            view_position[1],
+            view_position[2],
         )
 
-    def set_view(self, view: glm.mat4) -> None:
-        self._view = view
+    def set_view(self, view: np.ndarray) -> None:
+        if view.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "view"),
             1,
             GL_FALSE,
-            glm.value_ptr(self._view),
+            view,
         )
 
-    def set_projection(self, projection: glm.mat4) -> None:
-        self._projection = projection
+    def set_projection(self, projection: np.ndarray) -> None:
+        if projection.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "projection"),
             1,
             GL_FALSE,
-            glm.value_ptr(self._projection),
+            projection,
         )
 
-    def set_light_position(self, light_position: glm.vec3) -> None:
-        self._light_position = light_position
+    def set_light_position(self, light_position: np.ndarray) -> None:
+        if light_position.size != 3:
+            raise ValueError("Expected 3 elements")
+        # else...
         glUseProgram(self._shader)
         glUniform3f(
             glGetUniformLocation(self._shader, "lightPos"),
-            light_position.x,
-            light_position.y,
-            light_position.z,
+            light_position[0],
+            light_position[1],
+            light_position[2],
         )
 
-    def set_color(self, color: glm.vec3) -> None:
+    def set_color(self, color: np.ndarray) -> None:
+        if color.size != 3:
+            raise ValueError("Expected 3 elements")
+        # else...
         glUseProgram(self._shader)
         glUniform3fv(
             glGetUniformLocation(self._shader, "objectColor"),
             1,
-            glm.value_ptr(color),
+            color,
         )
 
-    def set_model(self, model: glm.mat4) -> None:
+    def set_model(self, model: np.ndarray) -> None:
+        if model.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             glGetUniformLocation(self._shader, "model"),
             1,
             GL_FALSE,
-            glm.value_ptr(model),
+            model,
         )
 
     def draw(self) -> None:
