@@ -219,21 +219,20 @@ class App:
             balls = [meshes.Ball(sphere.radius.item()) for sphere in self._spheres]
             light_position = np.array((1.2, 4.0, 2.0), dtype=np.float32)
 
-            camera_position = glm.normalize(glm.vec3(3.0, 7.0, 3.0))
+            camera_position = np.array((3.0, 7.0, 3.0), dtype=np.float32)
+            camera_position /= np.linalg.norm(camera_position)
             camera_radians = glm.vec2(
-                math.atan(camera_position.z / camera_position.x),
-                math.atan(camera_position.y / camera_position.x),
+                math.atan(camera_position[2] / camera_position[0]),
+                math.atan(camera_position[1] / camera_position[0]),
             )
-            camera_position = glm.vec3(
-                *update_orbit_camera_position(
-                    camera_radians[0],
-                    camera_radians[1],
-                    5.0,
-                )
+            camera_position = update_orbit_camera_position(
+                camera_radians[0],
+                camera_radians[1],
+                5.0,
             )
 
             view = glm.lookAt(
-                camera_position,
+                glm.vec3(*camera_position),
                 glm.vec3(0.0, 0.5, 0.0),
                 glm.vec3(0.0, 1.0, 0.0),
             )
@@ -259,7 +258,7 @@ class App:
             container.set_view(np.array(view).T)
             container.set_model(np.array(glm.mat4(1.0)).T)
             container.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
-            container.set_view_position(np.array(camera_position))
+            container.set_view_position(camera_position)
             container.set_light_position(light_position)
 
             for sphere, ball, color in zip(self._spheres, balls, self._ball_colors):
@@ -273,7 +272,7 @@ class App:
                 )
                 ball.set_model(np.array(sphere_model).T)
                 ball.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
-                ball.set_view_position(np.array(camera_position))
+                ball.set_view_position(camera_position)
                 ball.set_light_position(light_position)
 
             self._water.set_light_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
@@ -450,12 +449,10 @@ class App:
                                 0,
                                 25.0,
                             )
-                            camera_position = glm.vec3(
-                                *update_orbit_camera_position(
-                                    camera_radians[0],
-                                    camera_radians[1],
-                                    camera_radius,
-                                )
+                            camera_position = update_orbit_camera_position(
+                                camera_radians[0],
+                                camera_radians[1],
+                                camera_radius,
                             )
 
                         self.current_scroll_offset.x = 0.0
@@ -465,7 +462,7 @@ class App:
 
                         if camera_changed:
                             view = glm.lookAt(
-                                camera_position,
+                                glm.vec3(*camera_position),
                                 glm.vec3(0.0, 0.5, 0.0),
                                 glm.vec3(0.0, 1.0, 0.0),
                             )
@@ -475,8 +472,8 @@ class App:
                             container.set_view(np.array(view).T)
                             self._water.set_view(np.array(view).T)
                             for ball in balls:
-                                ball.set_view_position(np.array(camera_position))
-                            container.set_view_position(np.array(camera_position))
+                                ball.set_view_position(camera_position)
+                            container.set_view_position(camera_position)
                             self._water.set_view_position(camera_position)
 
                         if self._framebuffer_size_changed:
@@ -510,9 +507,9 @@ class App:
 
                             jax_camera_position = jnp.array(
                                 [
-                                    camera_position.x,
-                                    camera_position.y,
-                                    camera_position.z,
+                                    camera_position[0],
+                                    camera_position[1],
+                                    camera_position[2],
                                 ],
                                 dtype=self._jax_float,
                             )
