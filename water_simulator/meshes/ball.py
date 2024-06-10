@@ -1,7 +1,6 @@
 import functools
 import os
 
-import glm
 import numpy as np
 from OpenGL.GL import *
 from OpenGL.GL import shaders
@@ -16,8 +15,8 @@ class Ball:
             vertex_data.extend(normal)
         vertex_data = np.array(vertex_data, dtype=np.float32)
         self._total_indices = len(indices)
-        self._vbo = self._init_vbo(glm.array(vertex_data))
-        self._ebo = self._init_ebo(glm.array(indices))
+        self._vbo = self._init_vbo(vertex_data)
+        self._ebo = self._init_ebo(indices)
         self._vao = self._init_vao(self._vbo, self._ebo)
         self._shader = self._init_shader(self._vao)
         glUseProgram(0)
@@ -76,26 +75,24 @@ class Ball:
             np.array(normals, dtype=np.float32),
         )
 
-    def _init_vbo(self, vertex: glm.array) -> None:
+    def _init_vbo(self, vertex: np.ndarray) -> None:
         vbo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ARRAY_BUFFER, vbo)
-            glBufferData(
-                GL_ARRAY_BUFFER, glm.sizeof(vertex), vertex.ptr, GL_STATIC_DRAW
-            )
+            glBufferData(GL_ARRAY_BUFFER, vertex.nbytes, vertex, GL_STATIC_DRAW)
         except Exception as exception:
             glDeleteBuffers(1, vbo)
             raise exception
         return vbo
 
-    def _init_ebo(self, indices: glm.array) -> None:
+    def _init_ebo(self, indices: np.ndarray) -> None:
         ebo = glGenBuffers(1)
         try:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             glBufferData(
                 GL_ELEMENT_ARRAY_BUFFER,
-                glm.sizeof(indices),
-                indices.ptr,
+                indices.nbytes,
+                indices,
                 GL_STATIC_DRAW,
             )
         except Exception as exception:
@@ -111,7 +108,7 @@ class Ball:
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
             # Positions.
             glVertexAttribPointer(
-                0, 3, GL_FLOAT, GL_FALSE, 6 * glm.sizeof(glm.float32), None
+                0, 3, GL_FLOAT, GL_FALSE, 6 * np.float32().itemsize, None
             )
             glEnableVertexAttribArray(0)
             # Normals.
@@ -120,8 +117,8 @@ class Ball:
                 3,
                 GL_FLOAT,
                 GL_FALSE,
-                6 * glm.sizeof(glm.float32),
-                ctypes.c_void_p(3 * glm.sizeof(glm.float32)),
+                6 * np.float32().itemsize,
+                ctypes.c_void_p(3 * np.float32().itemsize),
             )
             glEnableVertexAttribArray(1)
         except Exception as exception:
@@ -168,44 +165,52 @@ class Ball:
             light_color[2],
         )
 
-    def set_view_position(self, view_position: glm.vec3) -> None:
-        self._view_position = view_position
+    def set_view_position(self, view_position: np.ndarray) -> None:
+        if view_position.shape != (3,):
+            raise ValueError("Expected 3 elments")
+        # else...
         glUseProgram(self._shader)
         glUniform3f(
             self._view_position_uniform_location,
-            view_position.x,
-            view_position.y,
-            view_position.z,
+            view_position[0],
+            view_position[1],
+            view_position[2],
         )
 
-    def set_view(self, view: glm.mat4) -> None:
-        self._view = view
+    def set_view(self, view: np.ndarray) -> None:
+        if view.shape != (4, 4):
+            raise ValueError("Expected a 4x4 matrix")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._view_uniform_location,
             1,
             GL_FALSE,
-            glm.value_ptr(self._view),
+            view,
         )
 
-    def set_projection(self, projection: glm.mat4) -> None:
-        self._projection = projection
+    def set_projection(self, projection: np.ndarray) -> None:
+        if projection.shape != (4, 4):
+            raise ValueError("Expected a 4x4 matrix")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._projection_uniform_location,
             1,
             GL_FALSE,
-            glm.value_ptr(self._projection),
+            projection,
         )
 
-    def set_light_position(self, light_position: glm.vec3) -> None:
-        self._light_position = light_position
+    def set_light_position(self, light_position: np.ndarray) -> None:
+        if light_position.shape != (3,):
+            raise ValueError("Expected 3 elements")
+        # else...
         glUseProgram(self._shader)
         glUniform3f(
             glGetUniformLocation(self._shader, "lightPos"),
-            light_position.x,
-            light_position.y,
-            light_position.z,
+            light_position[0],
+            light_position[1],
+            light_position[2],
         )
 
     def set_color(self, color: np.ndarray) -> None:
@@ -217,6 +222,9 @@ class Ball:
         )
 
     def set_model(self, model: np.ndarray) -> None:
+        if model.size != 16:
+            raise ValueError("Expected 16 elements")
+        # else...
         glUseProgram(self._shader)
         glUniformMatrix4fv(
             self._model_location,
