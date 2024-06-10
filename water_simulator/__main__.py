@@ -114,8 +114,8 @@ class App:
         )
 
     def scroll_callback(self, window, xoffset: float, yoffset: float) -> None:
-        self.current_scroll_offset.x = xoffset
-        self.current_scroll_offset.y = yoffset
+        self.current_scroll_offset[0] = xoffset
+        self.current_scroll_offset[1] = yoffset
 
     # TODO: Maybe we can try buffer donation, otherwise out of ideas...
     def _simulate(
@@ -239,15 +239,12 @@ class App:
                 np.array((0.0, 0.5, 0.0), dtype=np.float32),
                 np.array((0.0, 1.0, 0.0), dtype=np.float32),
             )
-            view = np.array(view)
-            projection = glm.perspective(
+            projection = perspective(
                 np.radians(60.0),
                 self._framebuffer_width_size / self._framebuffer_height_size,
                 0.01,
                 100.0,
             )
-            projection = np.array(projection).T
-
             light.set_projection(projection)
             light.set_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             light.set_view(view)
@@ -484,14 +481,13 @@ class App:
                             self._water.set_view_position(camera_position)
 
                         if self._framebuffer_size_changed:
-                            projection = glm.perspective(
+                            projection = perspective(
                                 np.radians(60.0),
                                 self._framebuffer_width_size
                                 / self._framebuffer_height_size,
                                 0.01,
                                 100.0,
                             )
-                            projection = np.array(projection).T
                             light.set_projection(projection)
                             for ball in balls:
                                 ball.set_projection(projection)
@@ -675,7 +671,7 @@ class App:
         z = 1.0
         ray_nds = glm.vec3(x, y, z)
         ray_clip = glm.vec4(ray_nds.xy, -1.0, 1.0)
-        ray_eye = glm.inverse(projection.T) * ray_clip
+        ray_eye = glm.inverse(glm.mat4(projection.T)) * ray_clip
         ray_eye = glm.vec4(ray_eye.xy, -1.0, 0.0)
         ray_world = glm.vec3(glm.inverse(glm.mat4(view.T)) * ray_eye).xyz
         ray_world = np.array(ray_world)
@@ -719,6 +715,32 @@ def look_at(eye: np.ndarray, center: np.ndarray, up: np.ndarray) -> np.ndarray:
     result[3, 0] = -np.dot(s, eye)
     result[3, 1] = -np.dot(u, eye)
     result[3, 2] = np.dot(f, eye)
+
+    return result
+
+
+def perspective(
+    fov: np.ndarray, aspect: np.ndarray, near: np.ndarray, far: np.ndarray
+) -> np.ndarray:
+    """
+    Create a perspective projection matrix.
+
+    :param fov: Field of view in the y direction, in degrees.
+    :param aspect: Aspect ratio, defined as width divided by height.
+    :param near: Distance from the viewer to the near clipping plane.
+    :param far: Distance from the viewer to the far clipping plane.
+    :return: A 4x4 perspective projection matrix.
+    """
+    f = 1.0 / np.tan(fov / 2)
+    nf = 1 / (near - far)
+
+    result = np.zeros((4, 4))
+
+    result[0, 0] = f / aspect
+    result[1, 1] = f
+    result[2, 2] = (far + near) * nf
+    result[2, 3] = -1.0
+    result[3, 2] = (2 * far * near) * nf
 
     return result
 
