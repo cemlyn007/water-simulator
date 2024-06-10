@@ -248,12 +248,11 @@ class App:
             light.set_projection(projection)
             light.set_color(np.array((1.0, 1.0, 1.0), dtype=np.float32))
             light.set_view(view)
-            model = glm.mat4(1.0)
-            model = glm.translate(
-                model, glm.vec3(light_position[0], light_position[1], light_position[2])
+            model = scale(
+                np.identity(4, dtype=np.float32),
+                np.array((0.2, 0.2, 0.2), dtype=np.float32),
             )
-            model = glm.scale(model, glm.vec3(0.2))
-            model = np.array(model).T
+            model = translate(model, light_position)
             light.set_model(model)
 
             container.set_projection(projection)
@@ -743,6 +742,36 @@ def perspective(
     result[3, 2] = (2 * far * near) * nf
 
     return result
+
+
+def translate(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
+    """
+    Apply a translation to a 4x4 matrix.
+
+    :param matrix: The original 4x4 matrix.
+    :param vector: A 3-element translation vector.
+    :return: The translated 4x4 matrix.
+    """
+    translation_matrix = np.identity(4)
+    translation_matrix[3, 0:3] = vector
+
+    return np.dot(matrix, translation_matrix)
+
+
+def scale(matrix: np.ndarray, vector: np.ndarray) -> np.ndarray:
+    """
+    Apply a scaling transformation to a 4x4 matrix.
+
+    :param matrix: The original 4x4 matrix.
+    :param vector: A 3-element scaling vector.
+    :return: The scaled 4x4 matrix.
+    """
+    scaling_matrix = np.identity(4)
+    scaling_matrix[0, 0] = vector[0]
+    scaling_matrix[1, 1] = vector[1]
+    scaling_matrix[2, 2] = vector[2]
+
+    return np.dot(matrix, scaling_matrix)
 
 
 def main():
