@@ -234,12 +234,12 @@ class App:
                 5.0,
             )
 
-            view = glm.lookAt(
-                glm.vec3(*camera_position),
-                glm.vec3(0.0, 0.5, 0.0),
-                glm.vec3(0.0, 1.0, 0.0),
+            view = look_at(
+                camera_position,
+                np.array((0.0, 0.5, 0.0), dtype=np.float32),
+                np.array((0.0, 1.0, 0.0), dtype=np.float32),
             )
-            view = np.array(view).T
+            view = np.array(view)
             projection = glm.perspective(
                 np.radians(60.0),
                 self._framebuffer_width_size / self._framebuffer_height_size,
@@ -467,12 +467,12 @@ class App:
                         self.last_cursor_position[1] = self.current_cursor_position[1]
 
                         if camera_changed:
-                            view = glm.lookAt(
-                                glm.vec3(*camera_position),
-                                glm.vec3(0.0, 0.5, 0.0),
-                                glm.vec3(0.0, 1.0, 0.0),
+                            view = look_at(
+                                camera_position,
+                                np.array((0.0, 0.5, 0.0), dtype=np.float32),
+                                np.array((0.0, 1.0, 0.0), dtype=np.float32),
                             )
-                            view = np.array(view).T
+                            view = np.array(view)
                             light.set_view(view)
                             for ball in balls:
                                 ball.set_view(view)
@@ -677,7 +677,7 @@ class App:
         ray_clip = glm.vec4(ray_nds.xy, -1.0, 1.0)
         ray_eye = glm.inverse(projection.T) * ray_clip
         ray_eye = glm.vec4(ray_eye.xy, -1.0, 0.0)
-        ray_world = glm.vec3(glm.inverse(view.T) * ray_eye).xyz
+        ray_world = glm.vec3(glm.inverse(glm.mat4(view.T)) * ray_eye).xyz
         ray_world = np.array(ray_world)
         ray_world /= np.linalg.norm(ray_world)
         return ray_world
@@ -688,6 +688,39 @@ class App:
         )
         sphere_models = sphere_models.at[:, :3, 3].set(sphere_centers)
         return sphere_models.reshape((sphere_models.shape[0], -1), order="F")
+
+
+def look_at(eye: np.ndarray, center: np.ndarray, up: np.ndarray) -> np.ndarray:
+    f = np.array(center - eye)
+    f = f / np.linalg.norm(f)
+
+    u = np.array(up)
+    u = u / np.linalg.norm(u)
+
+    s = np.cross(f, u)
+    s = s / np.linalg.norm(s)
+
+    u = np.cross(s, f)
+
+    result = np.identity(4)
+
+    result[0, 0] = s[0]
+    result[1, 0] = s[1]
+    result[2, 0] = s[2]
+
+    result[0, 1] = u[0]
+    result[1, 1] = u[1]
+    result[2, 1] = u[2]
+
+    result[0, 2] = -f[0]
+    result[1, 2] = -f[1]
+    result[2, 2] = -f[2]
+
+    result[3, 0] = -np.dot(s, eye)
+    result[3, 1] = -np.dot(u, eye)
+    result[3, 2] = np.dot(f, eye)
+
+    return result
 
 
 def main():
