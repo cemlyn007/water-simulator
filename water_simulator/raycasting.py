@@ -81,7 +81,7 @@ class Sphere(Object):
             jnp.array([True, jnp.reshape(discriminant == 0.0, ())]),
         )
 
-        positions = ray.origin + lambdas[:, None] * ray.direction
+        positions = ray.origin[None, :] + lambdas[:, None] * ray.direction[None, :]
         return Intersections(positions, valid)
 
     def tree_flatten(self):
@@ -110,8 +110,8 @@ class BoundedPlane(Object):
         intersections = Plane(self.normal, self.offset).intersect(ray)
         valid = jnp.all(
             jnp.logical_and(
-                intersections.positions >= self.min_point,
-                intersections.positions <= self.max_point,
+                intersections.positions >= self.min_point[None, :],
+                intersections.positions <= self.max_point[None, :],
             )
         )
         return Intersections(
@@ -223,7 +223,7 @@ class Raycaster:
                             # Removing so might allow for more parallelism?
                             jnp.min(
                                 jnp.linalg.norm(
-                                    camera_position - valid_positions, axis=1
+                                    camera_position[None, :] - valid_positions, axis=1
                                 )
                             ),
                         )

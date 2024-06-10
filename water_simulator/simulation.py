@@ -1,3 +1,4 @@
+import functools
 import typing
 from typing import Sequence
 
@@ -13,9 +14,9 @@ class State(typing.NamedTuple):
     water_heights: jax.Array
     sphere_velocities: jax.Array
     water_velocities: jax.Array
-    wave_speed: float
+    wave_speed: jax.Array
     body_heights: jax.Array
-    time_delta: float
+    time_delta: jax.Array
 
 
 class Simulator:
@@ -39,31 +40,26 @@ class Simulator:
         self._m = m
         self._dtype = dtype
         self._spacing = spacing
-        self._grid_xz = grid_field[:, :, (0, 2)].reshape((self._n * self._m, 2))
-        self._grid_init_y = grid_field[:, :, 1].flatten()
+        self._grid_xz = grid_field[:, :, (0, 2)]  # .reshape((self._n * self._m, 2))
+        self._grid_init_y = grid_field[:, :, 1]
         self._tank_size = (
             jnp.array([self._n, self._m], dtype=self._dtype) * spacing
         ) * 0.5
-
         self._jax_backend = jax.default_backend()
-        self.update = jax.jit(self.update, donate_argnums=(0,))
 
     def init_state(self) -> State:
         return State(
             sphere_centers=self._spheres.center.copy(),
             water_heights=self._grid_init_y.copy(),
             sphere_velocities=jnp.zeros_like(self._spheres.center),
-            water_velocities=jnp.zeros((self._n, self._m), dtype=self._dtype).ravel(),
+            water_velocities=jnp.zeros((self._n, self._m), dtype=self._dtype),
             wave_speed=jnp.array(2.0, self._dtype),
-            body_heights=jnp.zeros((self._n, self._m), dtype=self._dtype).ravel(),
+            body_heights=jnp.zeros((self._n, self._m), dtype=self._dtype),
             time_delta=jnp.array(0.0, self._dtype),
         )
 
+    @functools.partial(jax.jit, static_argnums=(0,), donate_argnums=(1,))
     def simulate(self, state: State) -> State:
-        state = self.update(state, state.time_delta)
-        return state
-
-    def update(self, state: State, time_delta: float) -> State:
         sphere_restitution = 0.1
         sphere_mass = (
             4.0
@@ -74,7 +70,7 @@ class Simulator:
         )
 
         (
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
             water_heights,
             body_heights,
@@ -82,25 +78,24 @@ class Simulator:
             wave_speed,
         ) = self._update_sphere_water_collision(
             state=state,
-            time_delta=time_delta,
             sphere_mass=sphere_mass,
         )
 
         (
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
         ) = self._update_sphere_floor_collision(
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
             self._spheres.radius,
             sphere_restitution,
         )
 
         (
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
         ) = self._update_sphere_wall_collision(
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
             self._spheres.radius,
             sphere_restitution,
@@ -110,46 +105,46 @@ class Simulator:
             sphere_collision_positional_correction,
             sphere_collision_velocity_correction,
         ) = self._calculate_spherical_collision_correction_updates(
-            sphere_center,
+            sphere_centers,
             sphere_velocities,
             self._spheres.radius,
             sphere_mass,
             sphere_restitution,
         )
 
-        sphere_center += sphere_collision_positional_correction
+        sphere_centers += sphere_collision_positional_correction
         sphere_velocities += sphere_collision_velocity_correction
 
         # Now let us add the behaviour between the sphere and the walls.
         return State(
-            sphere_centers=sphere_center,
-            water_heights=jnp.ravel(water_heights),
+            sphere_centers=sphere_centers,
+            water_heights=water_heights,
             sphere_velocities=sphere_velocities,
-            water_velocities=jnp.ravel(water_velocities),
+            water_velocities=water_velocities,
             wave_speed=wave_speed,
-            body_heights=jnp.ravel(body_heights),
-            time_delta=time_delta,
+            body_heights=body_heights,
+            time_delta=state.time_delta,
         )
 
     def _update_sphere_water_collision(
         self,
         state: State,
-        time_delta: float,
         sphere_mass: jax.Array,
     ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         spheres = self._spheres._replace(center=state.sphere_centers)
 
         sphere_body_heights = self._get_sphere_body_heights(state, spheres)
-
+        sphere_body_heights = self._smooth_height_fields(sphere_body_heights)
         body_heights = jnp.sum(sphere_body_heights, axis=0)
+
         (
             water_heights,
             water_velocities,
             wave_speed,
-        ) = self._update_water_by_body_height(state, time_delta, body_heights)
+        ) = self._update_water_by_body_height(state, body_heights)
 
         sphere_center, sphere_velocities = self._update_sphere_by_body_height(
-            state, time_delta, spheres, sphere_mass, sphere_body_heights
+            state, spheres, sphere_mass, sphere_body_heights
         )
 
         return (
@@ -164,73 +159,70 @@ class Simulator:
     def _get_sphere_body_heights(
         self, state: State, spheres: collisions.Sphere
     ) -> jax.Array:
-        # Now let us handle the behaviour between the sphere and the water.
         sphere_grid_distance_squared = jnp.sum(
             jnp.square(
-                self._grid_xz[None, :, :]
-                - spheres.center[:, jnp.array([0, 2])][:, None, :]
+                jnp.subtract(
+                    spheres.center[:, jnp.array([0, 2])][:, None, None, :],
+                    self._grid_xz[None, :, :, :],
+                )
             ),
             axis=-1,
         )
-
         sphere_radius_squared = jnp.square(spheres.radius)
-        body_half_heights_squared = (
-            sphere_radius_squared[:, None] - sphere_grid_distance_squared
+        body_half_heights_squared = jnp.subtract(
+            sphere_radius_squared[:, None, None], sphere_grid_distance_squared
         )
         body_half_heights_squared = jnp.maximum(body_half_heights_squared, 0.0)
         body_half_heights = jnp.sqrt(body_half_heights_squared)
-
-        # We do not need to do a max clamp of 0.0 because we know the sphere height is
-        # always above 0.
-        min_body = spheres.center[:, [1]] - body_half_heights
+        min_body = jnp.maximum(
+            spheres.center[:, [1]][:, :, None] - body_half_heights, 0.0
+        )
         max_body = jnp.minimum(
-            spheres.center[:, [1]] + body_half_heights, state.water_heights[None, :]
+            spheres.center[:, [1]][:, :, None] + body_half_heights,
+            state.water_heights[None, :],
         )
         sphere_body_heights = jnp.maximum(max_body - min_body, 0.0)
-
-        sphere_body_heights = jnp.reshape(
-            sphere_body_heights, (self._n_spheres, self._n, self._m)
-        )
-        sphere_body_heights = self._smooth_sphere_body_heights(sphere_body_heights)
         return sphere_body_heights
 
     def _update_water_by_body_height(
         self,
         state: State,
-        time_delta: float,
         body_heights: jax.Array,
     ) -> tuple[jax.Array, jax.Array, jax.Array]:
-        previous_body_heights = jnp.reshape(state.body_heights, (self._n, self._m))
-        water_heights = jnp.reshape(state.water_heights, (self._n, self._m))
+        previous_body_heights = state.body_heights
+        water_heights = state.water_heights
         body_change = body_heights - previous_body_heights
         water_heights += self.ALPHA * body_change
-
-        wave_speed = jnp.minimum(state.wave_speed, 0.5 * self._spacing / time_delta)
-
-        c = jnp.square(wave_speed) / jnp.square(self._spacing)
-        positional_damping = jnp.minimum(self.POSITIONAL_DAMPING * time_delta, 1.0)
-        velocity_damping = jnp.maximum(0.0, 1.0 - self.VELOCITY_DAMPING * time_delta)
-
-        water_velocities = state.water_velocities.reshape((self._n, self._m))
-
+        wave_speed = jnp.minimum(
+            state.wave_speed, 0.5 * self._spacing / state.time_delta
+        )
+        c = jnp.square(wave_speed / self._spacing)
+        water_velocities = state.water_velocities
         padded_water_heights = jnp.pad(water_heights, 1, mode="edge")
+        kernel = np.array(
+            [
+                [0.0, 1.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+            ]
+        )
         sums = jax.scipy.signal.convolve2d(
             padded_water_heights,
-            jnp.array(
-                [
-                    [0.0, 1.0, 0.0],
-                    [1.0, 0.0, 1.0],
-                    [0.0, 1.0, 0.0],
-                ]
-            ),
+            kernel,
             mode="valid",
             precision="highest",
         )
-        water_velocities += time_delta * c * (sums - 4.0 * water_heights)
+        velocity_damping = jnp.maximum(
+            0.0, 1.0 - self.VELOCITY_DAMPING * state.time_delta
+        )
+        water_velocities += state.time_delta * c * (sums - kernel.sum() * water_heights)
         water_velocities *= velocity_damping
 
-        water_heights += (0.25 * sums - water_heights) * positional_damping
-        water_heights += time_delta * water_velocities
+        positional_damping = jnp.minimum(
+            self.POSITIONAL_DAMPING * state.time_delta, 1.0
+        )
+        water_heights += (1 / kernel.sum() * sums - water_heights) * positional_damping
+        water_heights += state.time_delta * water_velocities
         return (
             water_heights,
             water_velocities,
@@ -240,7 +232,6 @@ class Simulator:
     def _update_sphere_by_body_height(
         self,
         state: State,
-        time_delta: float,
         spheres: collisions.Sphere,
         sphere_mass: jax.Array,
         sphere_body_heights: jax.Array,
@@ -251,7 +242,7 @@ class Simulator:
         force = jnp.sum(forces, axis=(1, 2))
         acceleration = force / sphere_mass + self.GRAVITY_CONSTANT
 
-        sphere_y_velocity_increment = time_delta * acceleration
+        sphere_y_velocity_increment = state.time_delta * acceleration
 
         # JAX METAL does not support at[] correctly.
         if self._jax_backend in ["METAL"]:
@@ -269,16 +260,15 @@ class Simulator:
             )
         else:
             sphere_velocities = state.sphere_velocities.at[:, 1].set(
-                state.sphere_velocities[:, 1] + time_delta * acceleration,
+                state.sphere_velocities[:, 1] + sphere_y_velocity_increment,
                 indices_are_sorted=True,
                 unique_indices=True,
             )
 
         sphere_velocities *= jnp.where(
-            jnp.any(sphere_body_heights > 0.0, axis=(1, 2))[:, jnp.newaxis], 0.93, 1.0
+            jnp.any(sphere_body_heights > 0.0, axis=(1, 2))[:, None], 0.93, 1.0
         )
-
-        sphere_center = spheres.center + time_delta * sphere_velocities
+        sphere_center = spheres.center + state.time_delta * sphere_velocities
         return sphere_center, sphere_velocities
 
     def _update_sphere_floor_collision(
@@ -532,20 +522,18 @@ class Simulator:
         sphere_mass: jax.Array,
         sphere_restitution: float,
     ) -> tuple[jax.Array, jax.Array]:
-        centroid_directions = -1.0 * (sphere_center[:, None] - sphere_center)
-
+        centroid_directions = -1.0 * (
+            sphere_center[:, None, :] - sphere_center[None, :, :]
+        )
         centroid_distances = jnp.linalg.norm(centroid_directions, axis=2)
-        added_radii = sphere_radius[:, None] + sphere_radius
-
+        added_radii = sphere_radius[:, None] + sphere_radius[None, :]
         intersection_mask = centroid_distances < added_radii
         intersection_mask = intersection_mask.at[jnp.diag_indices(self._n_spheres)].set(
             False,
             indices_are_sorted=True,
             unique_indices=True,
         )
-
         correction = (added_radii - centroid_distances) / 2.0
-
         collision_direction = centroid_directions / jnp.expand_dims(
             centroid_distances.at[jnp.diag_indices(self._n_spheres)].set(
                 1.0,
@@ -554,76 +542,55 @@ class Simulator:
             ),
             2,
         )
-
         collision_direction *= intersection_mask[:, :, None]
-
         position_correction = jnp.sum(
             collision_direction * -1.0 * jnp.expand_dims(correction, 2),
             axis=1,
         )
-
-        v = jnp.array(
-            [
-                [
-                    jnp.sum(sphere_velocities[i] * collision_direction[i, j])
-                    for j in range(self._n_spheres)
-                ]
-                for i in range(self._n_spheres)
-            ]
-        )
-        sphere_mass_mul_velocities = sphere_mass * v
-        new_v_pairs = jnp.array(
-            [
-                [
-                    (
-                        sphere_mass_mul_velocities[i, j]
-                        + sphere_mass_mul_velocities[j, i]
-                        - (
-                            (sphere_mass[j] * (v[i, j] - v[j, i]))
-                            if i < j
-                            else (sphere_mass[i] * (v[j, i] - v[i, j]))
-                        )
-                        * sphere_restitution
-                    )
-                    / (sphere_mass[i] + sphere_mass[j])
-                    for j in range(self._n_spheres)
-                ]
-                for i in range(self._n_spheres)
-            ]
-        )
-
+        v = sphere_velocities[:, None, :] * collision_direction
+        sphere_mass_mul_velocities = (sphere_mass[:, None] * sphere_velocities)[
+            :, None, :
+        ] * collision_direction
+        new_v = (
+            sphere_mass_mul_velocities
+            + jnp.transpose(sphere_mass_mul_velocities, (1, 0, 2))
+            - sphere_mass[:, None, None]
+            * (v - jnp.transpose(v, (1, 0, 2)))
+            * sphere_restitution
+        ) / jnp.expand_dims((sphere_mass[:, None] + sphere_mass[None, :]), axis=2)
         collision_correction_velocities = jnp.sum(
-            collision_direction * (new_v_pairs - v)[:, :, None],
+            collision_direction * (new_v - v),
             axis=1,
         )
-
         return position_correction, collision_correction_velocities
 
-    def _smooth_sphere_body_heights(self, sphere_body_height: jax.Array) -> jax.Array:
+    def _smooth_height_fields(self, height_fields: jax.Array) -> jax.Array:
         # Smooth the body heights field to reduce the amount of spikes and instabilities.
-        sphere_body_height = sphere_body_height[:, :, :, jnp.newaxis]
-        sphere_body_height = jnp.transpose(sphere_body_height, [0, 3, 1, 2])
-        kernel = jnp.ones((3, 3), dtype=sphere_body_height.dtype) / 9.0
-        kernel = kernel[:, :, jnp.newaxis, jnp.newaxis]
-        kernel = jnp.transpose(kernel, [3, 2, 0, 1])
+        height_fields = height_fields[:, :, :, None]
+        height_fields = jnp.transpose(height_fields, [0, 3, 1, 2])
+        kernel = np.ones((3, 3), dtype=height_fields.dtype) / 9.0
+        kernel = kernel[:, :, None, None]
+        kernel = np.transpose(kernel, [3, 2, 0, 1])
         for _ in range(2):
-            assert sphere_body_height.shape == (self._n_spheres, 1, self._n, self._m)
-            sphere_body_height = jax.lax.conv(
-                sphere_body_height,
-                kernel,
+            if height_fields.shape[1:] != (1, self._n, self._m):
+                raise AssertionError("Shape mismatch")
+            # else...
+            height_fields = jax.lax.conv(
+                height_fields,
+                jnp.asarray(kernel),
                 (1, 1),
                 "SAME",
                 precision="highest",
             )
-        return sphere_body_height[:, 0, :, :]
+        return height_fields[:, 0, :, :]
 
 
 class WaterVertexNormalUpdater:
-    def __init__(self, n: int, m: int, xz: jax.Array, indices: jax.Array) -> None:
+    def __init__(self, n: int, m: int, xz: np.ndarray, indices: np.ndarray) -> None:
         self._n = n
         self._m = m
         self._n_faces = (self._n - 1) * (self._m - 1) * 2
-        self._xz = jnp.reshape(xz, (self._n * self._m, 2))
+        self._xz = np.reshape(xz, (self._n * self._m, 2))
         self._indices = indices
         (
             self._element_index_map,
@@ -661,7 +628,7 @@ class WaterVertexNormalUpdater:
     def _vertex_face_normals(self, face_normals: jax.Array) -> jax.Array:
         vertex_normal_groups = jnp.zeros(
             (self._n * self._m, max(self._vertex_normal_groups_size), 3),
-            dtype=jnp.float32,
+            dtype=face_normals.dtype,
         )
         vertex_normal_groups = vertex_normal_groups.at[
             self._face_indices, self._element_index_map

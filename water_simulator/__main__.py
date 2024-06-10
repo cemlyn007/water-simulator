@@ -4,6 +4,7 @@ import ctypes
 import math
 import sys
 import time
+from typing import Sequence
 
 import glfw
 import glm
@@ -13,20 +14,6 @@ import numpy as np
 from OpenGL.GL import *
 
 from water_simulator import collisions, meshes, raycasting, simulation, textures
-
-
-class NvidiaProfiler:
-    def __init__(self) -> None:
-        self._libcudart = ctypes.cdll.LoadLibrary("libcudart.so")
-        self.running = False
-
-    def start(self) -> None:
-        self._libcudart.cudaProfilerStart()
-        self.running = True
-
-    def stop(self) -> None:
-        self._libcudart.cudaProfilerStop()
-        self.running = False
 
 
 def update_orbit_camera_position(
@@ -80,8 +67,9 @@ class App:
             self._n,
             self._m,
             cube_width,
+            dtype=self._jax_float,
         )
-        self._jit_simulate = jax.jit(self._simulate, donate_argnums=(0,))
+        self._jit_simulate = jax.jit(self._simulate, donate_argnums=(0, 1, 2))
 
     def _create_grid_field(self) -> np.ndarray:
         x_ticks = (
@@ -129,19 +117,26 @@ class App:
         self.current_scroll_offset.x = xoffset
         self.current_scroll_offset.y = yoffset
 
+    # TODO: Maybe we can try buffer donation, otherwise out of ideas...
     def _simulate(
         self,
         state: simulation.State,
+        time_delta: float,
+        donated: Sequence[jax.Array] = (),
     ) -> tuple[simulation.State, jax.Array, jax.Array, jax.Array]:
+        state = state._replace(
+            time_delta=jnp.asarray(time_delta, dtype=self._jax_float)
+        )
         next_state = self._simulator.simulate(state=state)
         water_vertex_normal_updater = simulation.WaterVertexNormalUpdater(
             self._n, self._m, self._water.xz, self._water.indices
         )
-        water_normals = water_vertex_normal_updater(next_state.water_heights)
+        water_heights = next_state.water_heights.ravel()
+        water_normals = water_vertex_normal_updater(water_heights)
         sphere_models = self._get_sphere_models(next_state.sphere_centers)
         return (
             next_state,
-            next_state.water_heights.astype(jnp.float32),
+            water_heights.astype(jnp.float32),
             water_normals.astype(jnp.float32),
             sphere_models,
         )
@@ -152,7 +147,6 @@ class App:
         max_iterations: int = float("inf"),
         enable_profiling: bool = False,
     ) -> None:
-        nvidia_profiler = NvidiaProfiler()
         try:
             glfw.init()
 
@@ -385,16 +379,26 @@ class App:
                 },
             )
             simulator_state = self._simulator.init_state()
+            water_heights = jnp.empty((self._n * self._m,), dtype=self._jax_float)
+            water_normals = jnp.empty((self._n * self._m * 3,), dtype=self._jax_float)
+            sphere_models = jnp.empty(
+                (len(self._spheres), 4 * 4), dtype=self._jax_float
+            )
             start = time.monotonic()
-            aot_compiled_simulate = self._jit_simulate.lower(
-                simulator_state,
-            ).compile()
+            if jax.config.jax_disable_jit:
+                simulate = self._jit_simulate
+            else:
+                simulate = self._jit_simulate.lower(
+                    state=simulator_state,
+                    time_delta=1 / 30.0,
+                    donated=(water_heights, water_normals, sphere_models),
+                ).compile()
             end = time.monotonic()
             print(f"Compiling simulator step took: {end - start} seconds.", flush=True)
             current_selected_entity = None
 
-            smoothing = 0.1
-            time_delta = 1 / 60.0
+            SMOOTHING = 0.1
+            time_delta = 1 / 30.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
             with (
@@ -421,11 +425,11 @@ class App:
                                 self.current_cursor_position - self.last_cursor_position
                             )
                             camera_radians.x += math.radians(
-                                smoothing * cursor_position_change.x
+                                SMOOTHING * cursor_position_change.x
                             )
                             camera_radians.x %= 2.0 * math.pi
                             camera_radians.y += math.radians(
-                                smoothing * cursor_position_change.y
+                                SMOOTHING * cursor_position_change.y
                             )
                             camera_radians.y %= 2.0 * math.pi
 
@@ -535,7 +539,7 @@ class App:
 
                         if current_selected_entity and not self.left_button_pressed:
                             current_selected_entity = None
-                        time_delta = min(1.0 / 60.0, 2.0 * time_delta)
+                        time_delta = min(1.0 / 30.0, 2.0 * time_delta)
                         if current_selected_entity:
                             (
                                 selected_entity_type,
@@ -582,12 +586,11 @@ class App:
                                 )
                         previous_selected_entity = current_selected_entity
 
-                        simulator_state = simulator_state._replace(
-                            time_delta=time_delta
-                        )
                         simulator_state, water_heights, water_normals, sphere_models = (
-                            aot_compiled_simulate(
-                                simulator_state,
+                            simulate(
+                                state=simulator_state,
+                                time_delta=time_delta,
+                                donated=(water_heights, water_normals, sphere_models),
                             )
                         )
                         (
@@ -646,7 +649,11 @@ class App:
                     pass
                 finally:
                     end_loop = glfw.get_time()
-                    average_latency_seconds = (end_loop - start_loop) / iteration
+                    average_latency_seconds = (
+                        (end_loop - start_loop) / iteration
+                        if iteration
+                        else float("inf")
+                    )
                     print(
                         f"Average FPS: {1.0 / average_latency_seconds} | Average Latency: {average_latency_seconds * 1000:.3f}ms.",
                         flush=True,
