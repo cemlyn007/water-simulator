@@ -6,8 +6,8 @@ import jax.numpy as jnp
 
 class Sphere(typing.NamedTuple):
     center: jax.Array
-    radius: float
-    density: float
+    radius: jax.Array
+    density: jax.Array
 
 
 class Rectanguloid(typing.NamedTuple):

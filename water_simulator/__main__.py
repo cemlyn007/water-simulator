@@ -15,6 +15,7 @@ from water_simulator import (
     algebra,
     collisions,
     meshes,
+    profilers,
     raycasting,
     simulation,
     textures,
@@ -141,7 +142,8 @@ class App:
         self,
         elapsed_time: float = float("inf"),
         max_iterations: int = float("inf"),
-        enable_profiling: bool = False,
+        enable_jax_profiling: bool = False,
+        enable_nvidia_profiling: bool = False,
     ) -> None:
         try:
             glfw.init()
@@ -398,9 +400,14 @@ class App:
             time_delta = 1 / 30.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
+
             with (
                 jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True)
-                if enable_profiling
+                if enable_jax_profiling
+                else contextlib.nullcontext()
+            ), (
+                profilers.nvidia_profile()
+                if enable_nvidia_profiling
                 else contextlib.nullcontext()
             ):
                 iteration = 0
@@ -500,7 +507,6 @@ class App:
                             ray_direction = self._get_cursor_ray(
                                 cursor_position, projection, view
                             )
-                            # ray_direction = ray_direction.T
                             ray_direction = jnp.array(
                                 ray_direction, dtype=self._jax_float
                             )
@@ -690,7 +696,10 @@ def main():
     argument_parser.add_argument("--max_seconds", type=int, default=float("inf"))
     argument_parser.add_argument("--max_iterations", type=int, default=float("inf"))
     argument_parser.add_argument(
-        "--enable_profiling", action="store_true", default=False
+        "--enable_jax_profiling", action="store_true", default=False
+    )
+    argument_parser.add_argument(
+        "--enable_nvidia_profiling", action="store_true", default=False
     )
     arguments = argument_parser.parse_args()
     n = arguments.n
@@ -699,7 +708,8 @@ def main():
     app.render_until(
         elapsed_time=arguments.max_seconds,
         max_iterations=arguments.max_iterations,
-        enable_profiling=arguments.enable_profiling,
+        enable_jax_profiling=arguments.enable_jax_profiling,
+        enable_nvidia_profiling=arguments.enable_nvidia_profiling,
     )
 
 

@@ -26,6 +26,11 @@ apt install python3-dev gcc g++
 ```
 
 ## Profiling
+### Using JAX native profiling
 ```
-nsys profile --capture-range=cudaProfilerApi --cuda-graph-trace=node --capture-range-end=stop -e JAX_TRACEBACK_IN_LOCATIONS_LIMIT=-1,DISPLAY=:1 water-simulator --n 501
+water-simulator --n 501 --enable_jax_profiling
+```
+### Using nsys
+```
+nsys profile --capture-range=cudaProfilerApi --cuda-graph-trace=node --capture-range-end=stop -e JAX_TRACEBACK_IN_LOCATIONS_LIMIT=-1,DISPLAY=:1 water-simulator --n 501 --enable_nvidia_profiling
 ```
