@@ -396,7 +396,6 @@ class App:
             print(f"Compiling simulator step took: {end - start} seconds.", flush=True)
             current_selected_entity = None
 
-            SMOOTHING = 0.1
             time_delta = 1 / 30.0
             ray_direction = jnp.empty((3,), dtype=self._jax_float)
             previous_left_button_pressed = False
@@ -429,11 +428,11 @@ class App:
                                 self.current_cursor_position - self.last_cursor_position
                             )
                             camera_radians[0] += math.radians(
-                                SMOOTHING * cursor_position_change[0]
+                                cursor_position_change[0]
                             )
                             camera_radians[0] %= 2.0 * math.pi
                             camera_radians[1] += math.radians(
-                                SMOOTHING * cursor_position_change[1]
+                                cursor_position_change[1]
                             )
                             camera_radians[1] %= 2.0 * math.pi
 
@@ -444,10 +443,9 @@ class App:
                         )
 
                         if camera_changed:
-                            # TODO: Optimise?
                             camera_radius = (
                                 np.linalg.norm(camera_position)
-                                + 0.1 * self.current_scroll_offset[1]
+                                + self.current_scroll_offset[1]
                             )
                             camera_radius = np.clip(
                                 camera_radius,
