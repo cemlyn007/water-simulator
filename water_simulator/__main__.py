@@ -88,14 +88,9 @@ class App:
 
     def framebuffer_size_callback(self, window, width, height):
         self._framebuffer_size_changed = True
-        if sys.platform == "darwin":
-            self._width = width // 2
-            self._height = height // 2
-        else:
-            self._width = width
-            self._height = height
         self._framebuffer_width_size = width
         self._framebuffer_height_size = height
+        self._width, self._height = glfw.get_window_size(window)
 
     def cursor_pos_callback(self, window, xpos: float, ypos: float) -> None:
         self.last_cursor_position[0] = self.current_cursor_position[0]
@@ -155,14 +150,6 @@ class App:
 
             self._width = 800
             self._height = 600
-
-            if sys.platform == "darwin":
-                self._framebuffer_width_size = self._width * 2
-                self._framebuffer_height_size = self._height * 2
-            else:
-                self._framebuffer_width_size = self._width
-                self._framebuffer_height_size = self._height
-
             window = glfw.create_window(
                 self._width,
                 self._height,
