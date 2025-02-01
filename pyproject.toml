@@ -15,10 +15,10 @@ classifiers = [
 ]
 
 dependencies = [
-  "glfw<3.0.0",
+  "glfw",
   "jax",
-  "PyOpenGL==3.1.7",
-  "PyOpenGL-accelerate==3.1.7",
+  "PyOpenGL",
+  "PyOpenGL-accelerate",
   "numpy",
 ]
 
