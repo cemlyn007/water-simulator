@@ -388,13 +388,16 @@ class App:
             previous_left_button_pressed = False
 
             with (
-                jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True)
-                if enable_jax_profiling
-                else contextlib.nullcontext()
-            ), (
-                profilers.nvidia_profile()
-                if enable_nvidia_profiling
-                else contextlib.nullcontext()
+                (
+                    jax.profiler.trace("/tmp/jax-trace", create_perfetto_link=True)
+                    if enable_jax_profiling
+                    else contextlib.nullcontext()
+                ),
+                (
+                    profilers.nvidia_profile()
+                    if enable_nvidia_profiling
+                    else contextlib.nullcontext()
+                ),
             ):
                 iteration = 0
                 end_loop = start_loop = start_iteration = glfw.get_time()
@@ -414,13 +417,9 @@ class App:
                             cursor_position_change = (
                                 self.current_cursor_position - self.last_cursor_position
                             )
-                            camera_radians[0] += math.radians(
-                                cursor_position_change[0]
-                            )
+                            camera_radians[0] += math.radians(cursor_position_change[0])
                             camera_radians[0] %= 2.0 * math.pi
-                            camera_radians[1] += math.radians(
-                                cursor_position_change[1]
-                            )
+                            camera_radians[1] += math.radians(cursor_position_change[1])
                             camera_radians[1] %= 2.0 * math.pi
 
                         camera_changed = (
@@ -570,9 +569,7 @@ class App:
                                     ].set(selected_sphere_center),
                                     sphere_velocities=simulator_state.sphere_velocities.at[
                                         selected_entity_index
-                                    ].set(
-                                        selected_sphere_velocity
-                                    ),
+                                    ].set(selected_sphere_velocity),
                                 )
                         previous_selected_entity = current_selected_entity
 
@@ -690,7 +687,7 @@ def main():
     )
     arguments = argument_parser.parse_args()
     n = arguments.n
-    print(f"Using {n*n} instances", flush=True)
+    print(f"Using {n * n} instances", flush=True)
     app = App(n, n, 0.02)
     app.render_until(
         elapsed_time=arguments.max_seconds,
