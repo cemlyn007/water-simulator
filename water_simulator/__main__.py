@@ -583,7 +583,9 @@ class App:
                                     ].set(selected_sphere_center),
                                     sphere_velocities=simulator_state.sphere_velocities.at[
                                         selected_entity_index
-                                    ].set(selected_sphere_velocity),
+                                    ].set(
+                                        selected_sphere_velocity
+                                    ),
                                 )
                         previous_selected_entity = current_selected_entity
 
