@@ -139,7 +139,11 @@ class App:
         max_iterations: int = float("inf"),
         enable_jax_profiling: bool = False,
         enable_nvidia_profiling: bool = False,
+        width: int = 800,
+        height: int = 600,
     ) -> None:
+        self._width = width
+        self._height = height
         try:
             glfw.init()
 
@@ -148,8 +152,6 @@ class App:
             glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
             glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, GL_TRUE)
 
-            self._width = 800
-            self._height = 600
             window = glfw.create_window(
                 self._width,
                 self._height,
