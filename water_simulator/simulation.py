@@ -171,12 +171,7 @@ class Simulator:
         self, state: State, spheres: collisions.Sphere
     ) -> jax.Array:
         sphere_grid_distance_squared = jnp.sum(
-            jnp.square(
-                jnp.subtract(
-                    spheres.center[:, jnp.array([0, 2])][:, None, None, :],
-                    self._grid_xz[None, :, :, :],
-                )
-            ),
+            jnp.square(spheres.center[:, None, None, [0, 2]] - self._grid_xz),
             axis=-1,
         )
         sphere_radius_squared = jnp.square(spheres.radius)
