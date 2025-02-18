@@ -123,13 +123,13 @@ class App:
         water_vertex_normal_updater = simulation.WaterVertexNormalUpdater(
             self._n, self._m, self._water.xz, self._water.indices
         )
-        water_heights = next_state.water_heights.ravel()
+        water_heights = next_state.water_heights.ravel().astype(jnp.float32)
         water_normals = water_vertex_normal_updater(water_heights)
         sphere_models = self._get_sphere_models(next_state.sphere_centers)
         return (
             next_state,
-            water_heights.astype(jnp.float32),
-            water_normals.astype(jnp.float32),
+            water_heights,
+            water_normals,
             sphere_models,
         )
 
@@ -367,8 +367,8 @@ class App:
                 },
             )
             simulator_state = self._simulator.init_state()
-            water_heights = jnp.empty((self._n * self._m,), dtype=self._jax_float)
-            water_normals = jnp.empty((self._n * self._m * 3,), dtype=self._jax_float)
+            water_heights = jnp.empty((self._n * self._m,), dtype=jnp.float32)
+            water_normals = jnp.empty((self._n * self._m * 3,), dtype=jnp.float32)
             sphere_models = jnp.empty(
                 (len(self._spheres), 4 * 4), dtype=self._jax_float
             )
