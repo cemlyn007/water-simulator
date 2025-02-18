@@ -69,6 +69,17 @@ class Simulator:
             * self._spheres.density
         )
 
+        sphere_velocities = state.sphere_velocities.at[:, 1].add(
+            state.time_delta * self.GRAVITY_CONSTANT
+        )
+        sphere_centers = state.sphere_centers.at[:, 1].add(
+            state.time_delta * sphere_velocities[:, 1]
+        )
+        state = state._replace(
+            sphere_centers=sphere_centers,
+            sphere_velocities=sphere_velocities,
+        )
+
         (
             sphere_centers,
             sphere_velocities,
@@ -240,7 +251,7 @@ class Simulator:
             -sphere_body_heights * jnp.square(self._spacing) * self.GRAVITY_CONSTANT
         )
         force = jnp.sum(forces, axis=(1, 2))
-        acceleration = force / sphere_mass + self.GRAVITY_CONSTANT
+        acceleration = force / sphere_mass
 
         sphere_y_velocity_increment = state.time_delta * acceleration
 
