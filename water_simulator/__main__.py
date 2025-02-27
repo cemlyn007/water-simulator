@@ -57,34 +57,14 @@ class App:
             (0.0, 1.0, 0.0),
             (0.0, 0.0, 1.0),
         ]
-        grid_field = self._create_grid_field()
         self._simulator = simulation.Simulator(
             [jax.tree.map(self._jax_float, sphere) for sphere in self._spheres],
-            grid_field,
             self._n,
             self._m,
             cube_width,
             dtype=self._jax_float,
         )
         self._jit_simulate = jax.jit(self._simulate, donate_argnums=(0, 1, 2))
-
-    def _create_grid_field(self) -> np.ndarray:
-        x_ticks = (
-            np.linspace(0.0, self._n, num=self._n, endpoint=True) * self._cube_width
-            - ((self._n - 1) * self._cube_width) / 2.0
-        )
-        z_ticks = (
-            np.linspace(0.0, self._m, num=self._m, endpoint=True) * self._cube_width
-            - ((self._m - 1) * self._cube_width) / 2.0
-        )
-
-        x = np.tile(x_ticks, (len(z_ticks), 1))
-        z = np.tile(z_ticks, (len(x_ticks), 1))
-        y = np.empty_like(x)
-        y.fill(0.8)
-
-        grid_field = np.stack((x.T, y, z), axis=-1)
-        return grid_field
 
     def framebuffer_size_callback(self, window, width, height):
         self._framebuffer_size_changed = True
@@ -197,7 +177,11 @@ class App:
 
             light = meshes.Light()
             self._water = meshes.Water(self._n, self._m, self._cube_width)
-            wall_size = ((max(self._n, self._m) - 1) * self._cube_width) / 2.0
+            if self._n != self._m:
+                raise NotImplementedError("Only square tanks are currently supported.")
+
+            # self._n could have been used since square.
+            wall_size = self._cube_width * (self._m - 1)
             wall_thickness = self._cube_width * 2
             container = meshes.Container(
                 wall_size,
@@ -272,6 +256,7 @@ class App:
             self._water.set_projection(projection)
             self._water.set_light_position(light_position)
 
+            half_wall = wall_size / 2
             raycaster = raycasting.Raycaster(
                 {
                     "floor": (
@@ -281,9 +266,9 @@ class App:
                             min_point=jnp.array(
                                 [-1.0, 0.0, -1.0], dtype=self._jax_float
                             )
-                            * (wall_size + wall_thickness),
+                            * (half_wall + wall_thickness),
                             max_point=jnp.array([1.0, 0.0, 1.0], dtype=self._jax_float)
-                            * (wall_size + wall_thickness),
+                            * (half_wall + wall_thickness),
                         ),
                     ),
                     "walls": (
@@ -291,17 +276,17 @@ class App:
                         raycasting.Rectanguloid(
                             jnp.array(
                                 [
-                                    -wall_size - wall_thickness,
+                                    -half_wall - wall_thickness,
                                     0.0,
-                                    -wall_size - wall_thickness,
+                                    -half_wall - wall_thickness,
                                 ],
                                 dtype=self._jax_float,
                             ),
                             jnp.array(
                                 [
-                                    -wall_size,
+                                    -half_wall,
                                     1.25,
-                                    wall_size,
+                                    half_wall,
                                 ],
                                 dtype=self._jax_float,
                             ),
@@ -309,14 +294,14 @@ class App:
                         # North Wall.
                         raycasting.Rectanguloid(
                             jnp.array(
-                                [-wall_size - wall_thickness, 0.0, wall_size],
+                                [-half_wall - wall_thickness, 0.0, half_wall],
                                 dtype=self._jax_float,
                             ),
                             jnp.array(
                                 [
-                                    wall_size + wall_thickness,
+                                    half_wall + wall_thickness,
                                     1.25,
-                                    wall_size + wall_thickness,
+                                    half_wall + wall_thickness,
                                 ],
                                 dtype=self._jax_float,
                             ),
@@ -325,17 +310,17 @@ class App:
                         raycasting.Rectanguloid(
                             jnp.array(
                                 [
-                                    wall_size,
+                                    half_wall,
                                     0.0,
-                                    -wall_size - wall_thickness,
+                                    -half_wall - wall_thickness,
                                 ],
                                 dtype=self._jax_float,
                             ),
                             jnp.array(
                                 [
-                                    wall_size + wall_thickness,
+                                    half_wall + wall_thickness,
                                     1.25,
-                                    wall_size + wall_thickness,
+                                    half_wall + wall_thickness,
                                 ],
                                 dtype=self._jax_float,
                             ),
@@ -344,17 +329,17 @@ class App:
                         raycasting.Rectanguloid(
                             jnp.array(
                                 [
-                                    -wall_size - wall_thickness,
+                                    -half_wall - wall_thickness,
                                     0.0,
-                                    -wall_size - wall_thickness,
+                                    -half_wall - wall_thickness,
                                 ],
                                 dtype=self._jax_float,
                             ),
                             jnp.array(
                                 [
-                                    wall_size + wall_thickness,
+                                    half_wall + wall_thickness,
                                     1.25,
-                                    -wall_size,
+                                    -half_wall,
                                 ],
                                 dtype=self._jax_float,
                             ),
@@ -528,7 +513,7 @@ class App:
 
                         if current_selected_entity and not self.left_button_pressed:
                             current_selected_entity = None
-                        time_delta = min(1.0 / 30.0, 2.0 * time_delta)
+                        time_delta = min(1.0 / 60.0, time_delta)
                         if current_selected_entity:
                             (
                                 selected_entity_type,
@@ -574,7 +559,6 @@ class App:
                                     ].set(selected_sphere_velocity),
                                 )
                         previous_selected_entity = current_selected_entity
-
                         simulator_state, water_heights, water_normals, sphere_models = (
                             simulate(
                                 state=simulator_state,

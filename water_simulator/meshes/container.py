@@ -26,9 +26,10 @@ class Container:
             cube_normals,
             cube_indices,
         ) = geometry.cube_vertices_normals_and_indices()
+        half_size = size / 2.0
         # Plane
         vertex_data = (
-            np.float32(size + wall_thickness)
+            np.float32(half_size + wall_thickness)
             * np.array(
                 [
                     # Bottom left
@@ -67,12 +68,12 @@ class Container:
 
         height_scale = 1.25
 
-        wall_length = 2.0 * (size + wall_thickness)
+        wall_length = 2.0 * (half_size + wall_thickness)
 
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
         cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
         cube_vertices_shaped += np.array(
-            [0.0, height_scale / 2.0, size + wall_thickness / 2.0]
+            [0.0, height_scale / 2.0, half_size + wall_thickness / 2.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -82,7 +83,7 @@ class Container:
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
         cube_vertices_shaped *= np.array([wall_length, height_scale, wall_thickness])
         cube_vertices_shaped += np.array(
-            [0.0, height_scale / 2.0, -size - wall_thickness / 2.0]
+            [0.0, height_scale / 2.0, -half_size - wall_thickness / 2.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -92,7 +93,7 @@ class Container:
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
         cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
         cube_vertices_shaped += np.array(
-            [size + wall_thickness / 2.0, height_scale / 2.0, 0.0]
+            [half_size + wall_thickness / 2.0, height_scale / 2.0, 0.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):
@@ -102,7 +103,7 @@ class Container:
         cube_vertices_shaped = np.reshape(cube_vertices, (-1, 3))
         cube_vertices_shaped *= np.array([wall_thickness, height_scale, wall_length])
         cube_vertices_shaped += np.array(
-            [-size - wall_thickness / 2.0, height_scale / 2.0, 0.0]
+            [-half_size - wall_thickness / 2.0, height_scale / 2.0, 0.0]
         )
         cube_normals_shaped = np.reshape(cube_normals, (-1, 3))
         for vertices, normals in zip(cube_vertices_shaped, cube_normals_shaped):

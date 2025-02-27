@@ -28,7 +28,6 @@ class Simulator:
     def __init__(
         self,
         spheres: Sequence[collisions.Sphere],
-        grid_field: np.ndarray,
         n: int,
         m: int,
         spacing: float,
@@ -40,12 +39,29 @@ class Simulator:
         self._m = m
         self._dtype = dtype
         self._spacing = spacing
-        self._grid_xz = grid_field[:, :, (0, 2)]  # .reshape((self._n * self._m, 2))
+        grid_field = self._create_grid_field(n, m)
+        self._grid_xz = grid_field[:, :, (0, 2)]
         self._grid_init_y = grid_field[:, :, 1]
-        self._tank_size = (
-            jnp.array([self._n, self._m], dtype=self._dtype) * spacing
-        ) * 0.5
+        self._tank_max = self._grid_xz.max((0, 1))
+        self._tank_min = self._grid_xz.min((0, 1))
         self._jax_backend = jax.default_backend()
+
+    def _create_grid_field(self, n: int, m: int) -> np.ndarray:
+        x_ticks = (
+            np.linspace(0.0, n - 1, num=self._n, endpoint=True) * self._spacing
+            - ((n - 1) * self._spacing) / 2.0
+        )
+        z_ticks = (
+            np.linspace(0.0, m - 1, num=m, endpoint=True) * self._spacing
+            - ((m - 1) * self._spacing) / 2.0
+        )
+        x = np.tile(x_ticks, (len(z_ticks), 1))
+        z = np.tile(z_ticks, (len(x_ticks), 1))
+        y = np.empty_like(x)
+        y.fill(0.8)
+
+        grid_field = np.stack((x.T, y, z), axis=-1)
+        return grid_field
 
     def init_state(self) -> State:
         return State(
@@ -332,16 +348,16 @@ class Simulator:
         sphere_restitution: float,
     ) -> tuple[jax.Array, jax.Array]:
         sphere_touching_north_wall = (
-            sphere_center[:, 2] + sphere_radius > self._tank_size[1]
+            sphere_center[:, 2] + sphere_radius > self._tank_max[1]
         )
         sphere_touching_south_wall = (
-            sphere_center[:, 2] - sphere_radius < -self._tank_size[1]
+            sphere_center[:, 2] - sphere_radius < self._tank_min[1]
         )
         sphere_touching_west_wall = (
-            sphere_center[:, 0] + sphere_radius > self._tank_size[0]
+            sphere_center[:, 0] + sphere_radius > self._tank_max[0]
         )
         sphere_touching_east_wall = (
-            sphere_center[:, 0] - sphere_radius < -self._tank_size[0]
+            sphere_center[:, 0] - sphere_radius < self._tank_min[0]
         )
 
         # JAX METAL does not support at[] correctly.
@@ -352,7 +368,7 @@ class Simulator:
                     sphere_center[:, 1, jnp.newaxis],
                     jnp.where(
                         sphere_touching_north_wall,
-                        self._tank_size[1] - sphere_radius,
+                        self._tank_max[1] - sphere_radius,
                         sphere_center[:, 2],
                     )[:, jnp.newaxis],
                 ],
@@ -377,7 +393,7 @@ class Simulator:
                     sphere_center[:, 1, jnp.newaxis],
                     jnp.where(
                         sphere_touching_south_wall,
-                        -self._tank_size[1] + sphere_radius,
+                        self._tank_min[1] + sphere_radius,
                         sphere_center[:, 2],
                     )[:, jnp.newaxis],
                 ],
@@ -400,7 +416,7 @@ class Simulator:
                 [
                     jnp.where(
                         sphere_touching_west_wall,
-                        self._tank_size[0] - sphere_radius,
+                        self._tank_max[0] - sphere_radius,
                         sphere_center[:, 0],
                     )[:, jnp.newaxis],
                     sphere_center[:, 1, jnp.newaxis],
@@ -425,7 +441,7 @@ class Simulator:
                 [
                     jnp.where(
                         sphere_touching_east_wall,
-                        -self._tank_size[0] + sphere_radius,
+                        self._tank_min[0] + sphere_radius,
                         sphere_center[:, 0],
                     )[:, jnp.newaxis],
                     sphere_center[:, 1, jnp.newaxis],
@@ -449,7 +465,7 @@ class Simulator:
             sphere_center = sphere_center.at[:, 2].set(
                 jnp.where(
                     sphere_touching_north_wall,
-                    self._tank_size[1] - sphere_radius,
+                    self._tank_max[1] - sphere_radius,
                     sphere_center[:, 2],
                 ),
                 indices_are_sorted=True,
@@ -467,7 +483,7 @@ class Simulator:
             sphere_center = sphere_center.at[:, 2].set(
                 jnp.where(
                     sphere_touching_south_wall,
-                    -self._tank_size[1] + sphere_radius,
+                    self._tank_min[1] + sphere_radius,
                     sphere_center[:, 2],
                 ),
                 indices_are_sorted=True,
@@ -485,7 +501,7 @@ class Simulator:
             sphere_center = sphere_center.at[:, 0].set(
                 jnp.where(
                     sphere_touching_west_wall,
-                    self._tank_size[0] - sphere_radius,
+                    self._tank_max[0] - sphere_radius,
                     sphere_center[:, 0],
                 ),
                 indices_are_sorted=True,
@@ -503,7 +519,7 @@ class Simulator:
             sphere_center = sphere_center.at[:, 0].set(
                 jnp.where(
                     sphere_touching_east_wall,
-                    -self._tank_size[0] + sphere_radius,
+                    self._tank_min[0] + sphere_radius,
                     sphere_center[:, 0],
                 ),
                 indices_are_sorted=True,
